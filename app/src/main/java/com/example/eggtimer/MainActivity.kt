@@ -1,19 +1,53 @@
 package com.example.eggtimer
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -21,10 +55,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.os.VibrationEffect
-import android.os.Vibrator
-import androidx.compose.animation.core.*
-import androidx.compose.ui.draw.rotate
 import com.example.eggtimer.ui.theme.EggTimerTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +68,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private const val PREF_SELECTED_LANGUAGE = "selected_language"
 
 @Composable
 fun LanguageMenu(
@@ -132,7 +164,7 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         pauseLabel = "Duraklat",
         restartLabel = "Tekrar",
         timerReadyTitle = "Yumurta hazır!",
-        timerReadySubtitle = "Afiyet olsun! 🍳",
+        timerReadySubtitle = "Afiyet olsun!",
         readyLabel = "Hazır!",
         totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
         eggLabel = "Yumurta"
@@ -151,21 +183,37 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         pauseLabel = "Pause",
         restartLabel = "Restart",
         timerReadyTitle = "Egg is ready!",
-        timerReadySubtitle = "Enjoy your meal! 🍳",
+        timerReadySubtitle = "Enjoy your meal!",
         readyLabel = "Ready!",
         totalTimeLabel = { minutes -> "Total time: $minutes min" },
         eggLabel = "Egg"
     )
 }
 
+private fun SharedPreferences.loadLanguage(): AppLanguage {
+    val saved = getString(PREF_SELECTED_LANGUAGE, AppLanguage.TURKISH.name)
+    return AppLanguage.values().firstOrNull { it.name == saved } ?: AppLanguage.TURKISH
+}
+
 @Composable
 fun EggTimerApp() {
+    val context = LocalContext.current
+    val preferences = remember {
+        context.getSharedPreferences("EggTimerPrefs", Context.MODE_PRIVATE)
+    }
+
     var selectedLevel by remember { mutableStateOf(EggLevel.SOFT) }
     var selectedMethod by remember { mutableStateOf(CookingMethod.BOILING_WATER) }
     var currentStep by remember { mutableStateOf(0) } // 0: seviye seçimi, 1: yöntem seçimi, 2: zamanlayıcı
-    var language by rememberSaveable { mutableStateOf(AppLanguage.TURKISH) }
+    var language by remember {
+        mutableStateOf(preferences.loadLanguage())
+    }
+    val onLanguageSelected: (AppLanguage) -> Unit = { selected ->
+        language = selected
+        preferences.edit().putString(PREF_SELECTED_LANGUAGE, selected.name).apply()
+    }
     val strings = localizedStrings(language)
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -177,14 +225,7 @@ fun EggTimerApp() {
         LanguageMenu(
             language = language,
             strings = strings,
-            onLanguageSelected = { language = it }
-        )
-
-        // Yumurta ikonu ve başlık
-        Text(
-            text = "🥚",
-            fontSize = 80.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
+            onLanguageSelected = onLanguageSelected
         )
 
         Text(
@@ -463,182 +504,144 @@ fun TimerScreen(
     language: AppLanguage
 ) {
     val context = LocalContext.current
-    
-    // Yönteme ve seviyeye göre süre hesaplama
+
     val totalSeconds = remember(level, method) {
         when (method) {
             CookingMethod.BOILING_WATER -> {
                 when (level) {
-                    EggLevel.SOFT -> 5 * 60  // 5 dakika
-                    EggLevel.MEDIUM -> 7 * 60  // 7 dakika
-                    EggLevel.HARD -> 10 * 60  // 10 dakika
+                    EggLevel.SOFT -> 5 * 60
+                    EggLevel.MEDIUM -> 7 * 60
+                    EggLevel.HARD -> 10 * 60
                 }
             }
+
             CookingMethod.COLD_WATER -> {
                 when (level) {
-                    EggLevel.SOFT -> 9 * 60  // 9 dakika
-                    EggLevel.MEDIUM -> 12 * 60  // 12 dakika
-                    EggLevel.HARD -> 15 * 60  // 15 dakika
+                    EggLevel.SOFT -> 9 * 60
+                    EggLevel.MEDIUM -> 12 * 60
+                    EggLevel.HARD -> 15 * 60
                 }
             }
         }
     }
-    
+
     var timeLeft by remember { mutableStateOf(totalSeconds) }
     var isRunning by remember { mutableStateOf(false) }
     var alarmTriggered by remember { mutableStateOf(false) }
-    
-    // Süre resetlendiğinde güncelle
+    var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activeVibrator?.cancel()
+        }
+    }
+
     LaunchedEffect(totalSeconds) {
         if (!isRunning) {
             timeLeft = totalSeconds
             alarmTriggered = false
         }
     }
-    
-    // Geri sayım ve alarm
-    LaunchedEffect(isRunning, timeLeft) {
+
+    LaunchedEffect(isRunning, totalSeconds) {
+        if (!isRunning) return@LaunchedEffect
+
         while (isRunning && timeLeft > 0) {
             kotlinx.coroutines.delay(1000)
-            timeLeft--
+            timeLeft -= 1
         }
 
         if (isRunning && timeLeft == 0) {
             isRunning = false
             alarmTriggered = true
-
-            // Titreşim
-            try {
-                val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
-                vibrator?.let { v ->
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), 0))
-                    } else {
-                        v.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), 0)
-                    }
-                }
-            } catch (e: Exception) {
-                // Vibrator bulunamadıysa sessizce geç
-            }
-
-            // Beep sesi (sistem sesi)
-            try {
-                val toneGenerator = android.media.ToneGenerator(
-                    android.media.AudioManager.STREAM_NOTIFICATION,
-                    100
-                )
-                // Melodi çal
-                toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-                kotlinx.coroutines.delay(300)
-                toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-            } catch (e: Exception) {
-                // Ses sistemi yoksa sessizce geç
-            }
         }
     }
-    
-    // Sallanan yumurta animasyonu
+
+    LaunchedEffect(alarmTriggered) {
+        if (!alarmTriggered || timeLeft != 0) {
+            activeVibrator?.cancel()
+            activeVibrator = null
+            return@LaunchedEffect
+        }
+
+        try {
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            activeVibrator = vibrator
+            vibrator?.let { v ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    v.vibrate(
+                        VibrationEffect.createWaveform(
+                            longArrayOf(0, 500, 200, 500, 200, 500),
+                            0
+                        )
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    v.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), 0)
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        try {
+            val toneGenerator = ToneGenerator(android.media.AudioManager.STREAM_ALARM, 80)
+            repeat(3) {
+                toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+                kotlinx.coroutines.delay(300)
+            }
+            toneGenerator.release()
+        } catch (_: Exception) {
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "egg_shake")
     val rotation by infiniteTransition.animateFloat(
-        initialValue = -15f,
-        targetValue = 15f,
+        initialValue = -8f,
+        targetValue = 8f,
         animationSpec = infiniteRepeatable(
-            animation = tween(300, easing = FastOutSlowInEasing),
+            animation = tween(350, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "egg_rotation"
     )
-    
-    // Alarm tetiklendiğinde animasyonu başlat
-    val shouldShake = alarmTriggered && timeLeft == 0
-    val rotationAngle = if (shouldShake) rotation else 0f
-    
+
+    val rotationAngle = if (alarmTriggered && timeLeft == 0) rotation else 0f
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "🍳",
-            fontSize = 100.sp,
-            modifier = Modifier
-                .rotate(rotationAngle)
-                .padding(bottom = 16.dp)
-        )
-
-        Text(
-            text = "${level.displayName(language)} ${strings.eggLabel}",
-            fontSize = 24.sp,
+            text = level.displayName(language),
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF5D4037),
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 4.dp)
         )
 
         Text(
             text = method.displayName(language),
             fontSize = 16.sp,
             color = Color(0xFF8D6E63),
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-        
-        // Süre bilgisi
+
         val minutes = totalSeconds / 60
         Text(
             text = strings.totalTimeLabel(minutes),
             fontSize = 14.sp,
             color = Color(0xFF9E9E9E),
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = 24.dp)
         )
-        
-        // Alarm durumu
-        if (alarmTriggered && timeLeft == 0) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFFFEBEE)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "🎉",
-                        fontSize = 48.sp
-                    )
-                    Text(
-                        text = strings.timerReadyTitle,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFC62828),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                    Text(
-                        text = strings.timerReadySubtitle,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE91E63),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(if (alarmTriggered) 8.dp else 16.dp))
-        
-        // Geri sayım göstergesi
+
         Card(
             modifier = Modifier
-                .size(200.dp)
-                .padding(bottom = 32.dp),
+                .size(220.dp)
+                .padding(bottom = 24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (timeLeft == 0) Color(0xFF4CAF50) else Color(0xFFFFCC80)
+                containerColor = if (alarmTriggered && timeLeft == 0) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
             ),
-            shape = RoundedCornerShape(100.dp),
+            shape = RoundedCornerShape(24.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Box(
@@ -649,23 +652,39 @@ fun TimerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (timeLeft == 0) "🎉" else "⏰",
-                        fontSize = 40.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        text = if (timeLeft == 0) strings.readyLabel else strings.eggLabel,
+                        fontSize = 18.sp,
+                        color = Color(0xFF5D4037),
+                        modifier = Modifier
+                            .rotate(rotationAngle)
+                            .padding(bottom = 8.dp)
                     )
                     Text(
-                        text = if (timeLeft == 0) strings.readyLabel else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
-                        fontSize = 32.sp,
+                        text = if (timeLeft == 0) strings.timerReadyTitle else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
+                        fontSize = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF5D4037)
                     )
                 }
             }
         }
-        
-        // Kontrol butonları
+
+        if (alarmTriggered && timeLeft == 0) {
+            Text(
+                text = strings.timerReadySubtitle,
+                fontSize = 16.sp,
+                color = Color(0xFF6D4C41),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 8.dp)
+            )
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
@@ -676,7 +695,7 @@ fun TimerScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF757575)
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
                     text = strings.backLabel,
@@ -687,10 +706,11 @@ fun TimerScreen(
 
             Button(
                 onClick = {
-                    isRunning = !isRunning
                     if (timeLeft == 0) {
                         timeLeft = totalSeconds
+                        alarmTriggered = false
                     }
+                    isRunning = !isRunning
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -698,7 +718,7 @@ fun TimerScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isRunning) Color(0xFFFF5722) else Color(0xFFFF9800)
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
                     text = when {
