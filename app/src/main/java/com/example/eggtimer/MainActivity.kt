@@ -347,12 +347,34 @@ fun TimerScreen(
     var timeLeft by remember { mutableStateOf(totalSeconds) }
     var isRunning by remember { mutableStateOf(false) }
     var alarmTriggered by remember { mutableStateOf(false) }
+    var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
+    var activeToneGenerator by remember { mutableStateOf<android.media.ToneGenerator?>(null) }
+
+    val stopAlerts = remember {
+        {
+            activeVibrator?.cancel()
+            activeVibrator = null
+
+            activeToneGenerator?.let { tone ->
+                tone.stopTone()
+                tone.release()
+            }
+            activeToneGenerator = null
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            stopAlerts()
+        }
+    }
     
     // Süre resetlendiğinde güncelle
     LaunchedEffect(totalSeconds) {
         if (!isRunning) {
             timeLeft = totalSeconds
             alarmTriggered = false
+            stopAlerts()
         }
     }
     
@@ -369,6 +391,7 @@ fun TimerScreen(
                 try {
                     val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
                     vibrator?.let { v ->
+                        activeVibrator = v
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), 0))
                         } else {
@@ -385,12 +408,17 @@ fun TimerScreen(
                         android.media.AudioManager.STREAM_NOTIFICATION,
                         100
                     )
+                    activeToneGenerator = toneGenerator
                     // Melodi çal
                     toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
                     kotlinx.coroutines.delay(300)
                     toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
                 } catch (e: Exception) {
                     // Ses sistemi yoksa sessizce geç
+                } finally {
+                    activeToneGenerator?.stopTone()
+                    activeToneGenerator?.release()
+                    activeToneGenerator = null
                 }
             }
         }
@@ -528,7 +556,10 @@ fun TimerScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
-                onClick = onBack,
+                onClick = {
+                    stopAlerts()
+                    onBack()
+                },
                 modifier = Modifier
                     .weight(1f)
                     .height(56.dp),
@@ -545,9 +576,10 @@ fun TimerScreen(
             }
             
             Button(
-                onClick = { 
+                onClick = {
                     isRunning = !isRunning
                     if (timeLeft == 0) {
+                        stopAlerts()
                         timeLeft = totalSeconds
                     }
                 },
