@@ -1,5 +1,6 @@
 package com.example.eggtimer
 
+import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import android.media.ToneGenerator
@@ -28,6 +29,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,22 +42,27 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.eggtimer.ui.theme.EggTimerTheme
 
 class MainActivity : ComponentActivity() {
@@ -75,7 +83,9 @@ private const val PREF_SELECTED_LANGUAGE = "selected_language"
 fun LanguageMenu(
     language: AppLanguage,
     strings: LocalizedStrings,
-    onLanguageSelected: (AppLanguage) -> Unit
+    onLanguageSelected: (AppLanguage) -> Unit,
+    isFullscreen: Boolean,
+    onFullscreenToggle: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -83,9 +93,15 @@ fun LanguageMenu(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.End,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        FullscreenToggle(
+            isFullscreen = isFullscreen,
+            onToggle = onFullscreenToggle,
+            strings = strings
+        )
+
         Text(
             text = strings.languageLabel,
             color = Color(0xFF5D4037),
@@ -126,6 +142,51 @@ fun LanguageMenu(
     }
 }
 
+@Composable
+fun FullscreenToggle(
+    isFullscreen: Boolean,
+    onToggle: () -> Unit,
+    strings: LocalizedStrings
+) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            imageVector = if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+            contentDescription = if (isFullscreen) strings.exitFullscreenLabel else strings.enterFullscreenLabel,
+            tint = Color(0xFF5D4037)
+        )
+    }
+}
+
+@Composable
+fun FullscreenEffect(isFullscreen: Boolean) {
+    val view = LocalView.current
+
+    DisposableEffect(isFullscreen) {
+        val window = (view.context as? Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+
+        if (window != null && controller != null) {
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+            if (isFullscreen) {
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        onDispose {
+            if (window != null && controller != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+}
+
 enum class AppLanguage(val label: String) {
     TURKISH("Türkçe"),
     ENGLISH("English")
@@ -146,6 +207,8 @@ data class LocalizedStrings(
     val timerReadyTitle: String,
     val timerReadySubtitle: String,
     val readyLabel: String,
+    val enterFullscreenLabel: String,
+    val exitFullscreenLabel: String,
     val totalTimeLabel: (Int) -> String,
     val eggLabel: String
 )
@@ -166,6 +229,8 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         timerReadyTitle = "Yumurta hazır!",
         timerReadySubtitle = "Afiyet olsun!",
         readyLabel = "Hazır!",
+        enterFullscreenLabel = "Tam ekran",
+        exitFullscreenLabel = "Tam ekrandan çık",
         totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
         eggLabel = "Yumurta"
     )
@@ -185,6 +250,8 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         timerReadyTitle = "Egg is ready!",
         timerReadySubtitle = "Enjoy your meal!",
         readyLabel = "Ready!",
+        enterFullscreenLabel = "Enter fullscreen",
+        exitFullscreenLabel = "Exit fullscreen",
         totalTimeLabel = { minutes -> "Total time: $minutes min" },
         eggLabel = "Egg"
     )
@@ -208,11 +275,14 @@ fun EggTimerApp() {
     var language by remember {
         mutableStateOf(preferences.loadLanguage())
     }
+    var isFullscreen by rememberSaveable { mutableStateOf(false) }
     val onLanguageSelected: (AppLanguage) -> Unit = { selected ->
         language = selected
         preferences.edit().putString(PREF_SELECTED_LANGUAGE, selected.name).apply()
     }
     val strings = localizedStrings(language)
+
+    FullscreenEffect(isFullscreen = isFullscreen)
 
     Column(
         modifier = Modifier
@@ -225,7 +295,9 @@ fun EggTimerApp() {
         LanguageMenu(
             language = language,
             strings = strings,
-            onLanguageSelected = onLanguageSelected
+            onLanguageSelected = onLanguageSelected,
+            isFullscreen = isFullscreen,
+            onFullscreenToggle = { isFullscreen = !isFullscreen }
         )
 
         Text(
