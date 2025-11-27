@@ -357,41 +357,42 @@ fun TimerScreen(
     }
     
     // Geri sayım ve alarm
-    LaunchedEffect(isRunning) {
-        if (isRunning && timeLeft > 0) {
+    LaunchedEffect(isRunning, timeLeft) {
+        while (isRunning && timeLeft > 0) {
             kotlinx.coroutines.delay(1000)
             timeLeft--
-            if (timeLeft == 0) {
-                isRunning = false
-                alarmTriggered = true
-                
-                // Titreşim
-                try {
-                    val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
-                    vibrator?.let { v ->
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), 0))
-                        } else {
-                            v.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), 0)
-                        }
+        }
+
+        if (isRunning && timeLeft == 0) {
+            isRunning = false
+            alarmTriggered = true
+
+            // Titreşim
+            try {
+                val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.let { v ->
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500, 200, 500), 0))
+                    } else {
+                        v.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), 0)
                     }
-                } catch (e: Exception) {
-                    // Vibrator bulunamadıysa sessizce geç
                 }
-                
-                // Beep sesi (sistem sesi)
-                try {
-                    val toneGenerator = android.media.ToneGenerator(
-                        android.media.AudioManager.STREAM_NOTIFICATION,
-                        100
-                    )
-                    // Melodi çal
-                    toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-                    kotlinx.coroutines.delay(300)
-                    toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-                } catch (e: Exception) {
-                    // Ses sistemi yoksa sessizce geç
-                }
+            } catch (e: Exception) {
+                // Vibrator bulunamadıysa sessizce geç
+            }
+
+            // Beep sesi (sistem sesi)
+            try {
+                val toneGenerator = android.media.ToneGenerator(
+                    android.media.AudioManager.STREAM_NOTIFICATION,
+                    100
+                )
+                // Melodi çal
+                toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+                kotlinx.coroutines.delay(300)
+                toneGenerator.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
+            } catch (e: Exception) {
+                // Ses sistemi yoksa sessizce geç
             }
         }
     }
