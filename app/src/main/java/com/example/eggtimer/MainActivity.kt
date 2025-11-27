@@ -16,6 +16,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,14 +46,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -84,35 +84,24 @@ fun LanguageMenu(
     language: AppLanguage,
     strings: LocalizedStrings,
     onLanguageSelected: (AppLanguage) -> Unit,
-    isFullscreen: Boolean,
-    onFullscreenToggle: () -> Unit
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FullscreenToggle(
-            isFullscreen = isFullscreen,
-            onToggle = onFullscreenToggle,
-            strings = strings
-        )
-
         Text(
             text = strings.languageLabel,
-            color = Color(0xFF5D4037),
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(end = 4.dp)
+            color = Color(0xFF4E342E),
+            fontWeight = FontWeight.SemiBold
         )
 
         Text(
             text = language.label,
-            color = Color(0xFF8D6E63),
-            modifier = Modifier.padding(end = 8.dp)
+            color = Color(0xFF795548)
         )
 
         Box {
@@ -120,7 +109,7 @@ fun LanguageMenu(
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = strings.settingsContentDescription,
-                    tint = Color(0xFF5D4037)
+                    tint = Color(0xFF4E342E)
                 )
             }
 
@@ -139,21 +128,6 @@ fun LanguageMenu(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun FullscreenToggle(
-    isFullscreen: Boolean,
-    onToggle: () -> Unit,
-    strings: LocalizedStrings
-) {
-    IconButton(onClick = onToggle) {
-        Icon(
-            imageVector = if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-            contentDescription = if (isFullscreen) strings.exitFullscreenLabel else strings.enterFullscreenLabel,
-            tint = Color(0xFF5D4037)
-        )
     }
 }
 
@@ -204,6 +178,7 @@ data class LocalizedStrings(
     val startLabel: String,
     val pauseLabel: String,
     val restartLabel: String,
+    val testLabel: String,
     val timerReadyTitle: String,
     val timerReadySubtitle: String,
     val readyLabel: String,
@@ -226,6 +201,7 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Başla",
         pauseLabel = "Duraklat",
         restartLabel = "Tekrar",
+        testLabel = "Test (3 sn)",
         timerReadyTitle = "Yumurta hazır!",
         timerReadySubtitle = "Afiyet olsun!",
         readyLabel = "Hazır!",
@@ -247,6 +223,7 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Start",
         pauseLabel = "Pause",
         restartLabel = "Restart",
+        testLabel = "Test (3s)",
         timerReadyTitle = "Egg is ready!",
         timerReadySubtitle = "Enjoy your meal!",
         readyLabel = "Ready!",
@@ -275,152 +252,155 @@ fun EggTimerApp() {
     var language by remember {
         mutableStateOf(preferences.loadLanguage())
     }
-    var isFullscreen by rememberSaveable { mutableStateOf(false) }
     val onLanguageSelected: (AppLanguage) -> Unit = { selected ->
         language = selected
         preferences.edit().putString(PREF_SELECTED_LANGUAGE, selected.name).apply()
     }
     val strings = localizedStrings(language)
+    FullscreenEffect(isFullscreen = true)
 
-    FullscreenEffect(isFullscreen = isFullscreen)
-
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFFF8E1))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .background(Color(0xFFFEF5E7))
     ) {
         LanguageMenu(
             language = language,
             strings = strings,
             onLanguageSelected = onLanguageSelected,
-            isFullscreen = isFullscreen,
-            onFullscreenToggle = { isFullscreen = !isFullscreen }
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 16.dp)
         )
 
-        Text(
-            text = strings.appTitle,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF8D6E63),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-        
-        when (currentStep) {
-            0 -> {
-                Text(
-                    text = strings.levelQuestion,
-                    fontSize = 18.sp,
-                    color = Color(0xFF5D4037),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp)
+                .padding(top = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = strings.appTitle,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF3E2723),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 28.dp)
+            )
 
-                // Yumurta seviyeleri
-                EggLevelSelector(
-                    selectedLevel = selectedLevel,
-                    onLevelSelected = { selectedLevel = it },
-                    language = language
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Button(
-                    onClick = { currentStep = 1 },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800)
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
+            when (currentStep) {
+                0 -> {
                     Text(
-                        text = strings.continueLabel,
+                        text = strings.levelQuestion,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color(0xFF4E342E),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 20.dp)
                     )
-                }
-            }
 
-            1 -> {
-                Text(
-                    text = strings.methodQuestion,
-                    fontSize = 18.sp,
-                    color = Color(0xFF5D4037),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
+                    EggLevelSelector(
+                        selectedLevel = selectedLevel,
+                        onLevelSelected = { selectedLevel = it },
+                        language = language
+                    )
 
-                Text(
-                    text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
-                    fontSize = 14.sp,
-                    color = Color(0xFF8D6E63),
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                // Pişirme yöntemleri
-                CookingMethodSelector(
-                    selectedMethod = selectedMethod,
-                    onMethodSelected = { selectedMethod = it },
-                    language = language
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = { currentStep = 0 },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF757575)
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text(
-                            text = strings.backLabel,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = { currentStep = 2 },
+                        onClick = { currentStep = 1 },
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF9800)
+                            containerColor = Color(0xFFFFA726)
                         ),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(14.dp)
                     ) {
                         Text(
-                            text = strings.startLabel,
-                            fontSize = 16.sp,
+                            text = strings.continueLabel,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
                 }
-            }
 
-            2 -> {
-                TimerScreen(
-                    level = selectedLevel,
-                    method = selectedMethod,
-                    onBack = { currentStep = 1 },
-                    strings = strings,
-                    language = language
-                )
+                1 -> {
+                    Text(
+                        text = strings.methodQuestion,
+                        fontSize = 18.sp,
+                        color = Color(0xFF4E342E),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    Text(
+                        text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
+                        fontSize = 14.sp,
+                        color = Color(0xFF6D4C41),
+                        modifier = Modifier.padding(bottom = 14.dp)
+                    )
+
+                    CookingMethodSelector(
+                        selectedMethod = selectedMethod,
+                        onMethodSelected = { selectedMethod = it },
+                        language = language
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { currentStep = 0 },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF8D6E63)
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = strings.backLabel,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                        }
+
+                        Button(
+                            onClick = { currentStep = 2 },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFFA726)
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = strings.startLabel,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                2 -> {
+                    TimerScreen(
+                        level = selectedLevel,
+                        method = selectedMethod,
+                        onBack = { currentStep = 1 },
+                        strings = strings,
+                        language = language
+                    )
+                }
             }
         }
     }
@@ -577,7 +557,7 @@ fun TimerScreen(
 ) {
     val context = LocalContext.current
 
-    val totalSeconds = remember(level, method) {
+    val baseTotalSeconds = remember(level, method) {
         when (method) {
             CookingMethod.BOILING_WATER -> {
                 when (level) {
@@ -597,10 +577,11 @@ fun TimerScreen(
         }
     }
 
-    var timeLeft by remember { mutableStateOf(totalSeconds) }
+    var timeLeft by remember { mutableStateOf(baseTotalSeconds) }
     var isRunning by remember { mutableStateOf(false) }
     var alarmTriggered by remember { mutableStateOf(false) }
     var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
+    var isTestMode by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -608,14 +589,14 @@ fun TimerScreen(
         }
     }
 
-    LaunchedEffect(totalSeconds) {
-        if (!isRunning) {
-            timeLeft = totalSeconds
-            alarmTriggered = false
-        }
+    LaunchedEffect(level, method) {
+        isRunning = false
+        alarmTriggered = false
+        isTestMode = false
+        timeLeft = baseTotalSeconds
     }
 
-    LaunchedEffect(isRunning, totalSeconds) {
+    LaunchedEffect(isRunning, baseTotalSeconds, isTestMode) {
         if (!isRunning) return@LaunchedEffect
 
         while (isRunning && timeLeft > 0) {
@@ -678,6 +659,7 @@ fun TimerScreen(
     )
 
     val rotationAngle = if (alarmTriggered && timeLeft == 0) rotation else 0f
+    val activeTotalSeconds = if (isTestMode) 3 else baseTotalSeconds
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -698,7 +680,7 @@ fun TimerScreen(
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        val minutes = totalSeconds / 60
+        val minutes = activeTotalSeconds / 60
         Text(
             text = strings.totalTimeLabel(minutes),
             fontSize = 14.sp,
@@ -711,7 +693,7 @@ fun TimerScreen(
                 .size(220.dp)
                 .padding(bottom = 24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (alarmTriggered && timeLeft == 0) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                containerColor = if (alarmTriggered && timeLeft == 0) Color(0xFFE8F5E9) else Color(0xFFFFFFFF)
             ),
             shape = RoundedCornerShape(24.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -723,19 +705,28 @@ fun TimerScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = if (timeLeft == 0) strings.readyLabel else strings.eggLabel,
-                        fontSize = 18.sp,
-                        color = Color(0xFF5D4037),
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_classic_egg),
+                        contentDescription = strings.eggLabel,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
+                            .size(96.dp)
+                            .padding(bottom = 12.dp)
                             .rotate(rotationAngle)
-                            .padding(bottom = 8.dp)
                     )
+
                     Text(
                         text = if (timeLeft == 0) strings.timerReadyTitle else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
                         fontSize = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF5D4037)
+                    )
+
+                    Text(
+                        text = if (timeLeft == 0) strings.readyLabel else strings.eggLabel,
+                        fontSize = 16.sp,
+                        color = Color(0xFF6D4C41),
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
             }
@@ -778,8 +769,9 @@ fun TimerScreen(
 
             Button(
                 onClick = {
-                    if (timeLeft == 0) {
-                        timeLeft = totalSeconds
+                    isTestMode = false
+                    if (timeLeft == 0 || timeLeft == 3) {
+                        timeLeft = baseTotalSeconds
                         alarmTriggered = false
                     }
                     isRunning = !isRunning
@@ -798,6 +790,30 @@ fun TimerScreen(
                         timeLeft == 0 -> strings.restartLabel
                         else -> strings.startLabel
                     },
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Button(
+                onClick = {
+                    isRunning = false
+                    alarmTriggered = false
+                    isTestMode = true
+                    timeLeft = 3
+                    isRunning = true
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = strings.testLabel,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
