@@ -7,19 +7,20 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.animation.core.*
@@ -39,10 +40,131 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+fun LanguageMenu(
+    language: AppLanguage,
+    strings: LocalizedStrings,
+    onLanguageSelected: (AppLanguage) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = strings.languageLabel,
+            color = Color(0xFF5D4037),
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(end = 4.dp)
+        )
+
+        Text(
+            text = language.label,
+            color = Color(0xFF8D6E63),
+            modifier = Modifier.padding(end = 8.dp)
+        )
+
+        Box {
+            IconButton(onClick = { expanded = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = strings.settingsContentDescription,
+                    tint = Color(0xFF5D4037)
+                )
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                AppLanguage.values().forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        onClick = {
+                            onLanguageSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+enum class AppLanguage(val label: String) {
+    TURKISH("Türkçe"),
+    ENGLISH("English")
+}
+
+data class LocalizedStrings(
+    val languageLabel: String,
+    val settingsContentDescription: String,
+    val appTitle: String,
+    val levelQuestion: String,
+    val continueLabel: String,
+    val methodQuestion: String,
+    val selectedLabel: String,
+    val backLabel: String,
+    val startLabel: String,
+    val pauseLabel: String,
+    val restartLabel: String,
+    val timerReadyTitle: String,
+    val timerReadySubtitle: String,
+    val readyLabel: String,
+    val totalTimeLabel: (Int) -> String,
+    val eggLabel: String
+)
+
+fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) {
+    AppLanguage.TURKISH -> LocalizedStrings(
+        languageLabel = "Dil",
+        settingsContentDescription = "Dil ayarları",
+        appTitle = "Yumurta Zamanlayıcısı",
+        levelQuestion = "Yumurtanızı nasıl pişirmek istiyorsunuz?",
+        continueLabel = "Devam Et",
+        methodQuestion = "Pişirme yönteminizi seçin",
+        selectedLabel = "Seçilen",
+        backLabel = "Geri",
+        startLabel = "Başla",
+        pauseLabel = "Duraklat",
+        restartLabel = "Tekrar",
+        timerReadyTitle = "Yumurta hazır!",
+        timerReadySubtitle = "Afiyet olsun! 🍳",
+        readyLabel = "Hazır!",
+        totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
+        eggLabel = "Yumurta"
+    )
+
+    AppLanguage.ENGLISH -> LocalizedStrings(
+        languageLabel = "Language",
+        settingsContentDescription = "Language settings",
+        appTitle = "Egg Timer",
+        levelQuestion = "How would you like your egg cooked?",
+        continueLabel = "Continue",
+        methodQuestion = "Choose your cooking method",
+        selectedLabel = "Selected",
+        backLabel = "Back",
+        startLabel = "Start",
+        pauseLabel = "Pause",
+        restartLabel = "Restart",
+        timerReadyTitle = "Egg is ready!",
+        timerReadySubtitle = "Enjoy your meal! 🍳",
+        readyLabel = "Ready!",
+        totalTimeLabel = { minutes -> "Total time: $minutes min" },
+        eggLabel = "Egg"
+    )
+}
+
+@Composable
 fun EggTimerApp() {
     var selectedLevel by remember { mutableStateOf(EggLevel.SOFT) }
     var selectedMethod by remember { mutableStateOf(CookingMethod.BOILING_WATER) }
     var currentStep by remember { mutableStateOf(0) } // 0: seviye seçimi, 1: yöntem seçimi, 2: zamanlayıcı
+    var language by rememberSaveable { mutableStateOf(AppLanguage.TURKISH) }
+    val strings = localizedStrings(language)
     
     Column(
         modifier = Modifier
@@ -52,15 +174,21 @@ fun EggTimerApp() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        LanguageMenu(
+            language = language,
+            strings = strings,
+            onLanguageSelected = { language = it }
+        )
+
         // Yumurta ikonu ve başlık
         Text(
             text = "🥚",
             fontSize = 80.sp,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-        
+
         Text(
-            text = "Yumurta Zamanlayıcısı",
+            text = strings.appTitle,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF8D6E63),
@@ -71,17 +199,18 @@ fun EggTimerApp() {
         when (currentStep) {
             0 -> {
                 Text(
-                    text = "Yumurtanızı nasıl pişirmek istiyorsunuz?",
+                    text = strings.levelQuestion,
                     fontSize = 18.sp,
                     color = Color(0xFF5D4037),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
-                
+
                 // Yumurta seviyeleri
                 EggLevelSelector(
                     selectedLevel = selectedLevel,
-                    onLevelSelected = { selectedLevel = it }
+                    onLevelSelected = { selectedLevel = it },
+                    language = language
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -97,34 +226,35 @@ fun EggTimerApp() {
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = "Devam Et",
+                        text = strings.continueLabel,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
             }
-            
+
             1 -> {
                 Text(
-                    text = "Pişirme yönteminizi seçin",
+                    text = strings.methodQuestion,
                     fontSize = 18.sp,
                     color = Color(0xFF5D4037),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
-                
+
                 Text(
-                    text = "Seçilen: ${selectedLevel.displayName}",
+                    text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
                     fontSize = 14.sp,
                     color = Color(0xFF8D6E63),
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                
+
                 // Pişirme yöntemleri
                 CookingMethodSelector(
                     selectedMethod = selectedMethod,
-                    onMethodSelected = { selectedMethod = it }
+                    onMethodSelected = { selectedMethod = it },
+                    language = language
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -144,12 +274,12 @@ fun EggTimerApp() {
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
-                            text = "Geri",
+                            text = strings.backLabel,
                             fontSize = 16.sp,
                             color = Color.White
                         )
                     }
-                    
+
                     Button(
                         onClick = { currentStep = 2 },
                         modifier = Modifier
@@ -161,7 +291,7 @@ fun EggTimerApp() {
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
-                            text = "Başla",
+                            text = strings.startLabel,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -169,12 +299,14 @@ fun EggTimerApp() {
                     }
                 }
             }
-            
+
             2 -> {
                 TimerScreen(
                     level = selectedLevel,
                     method = selectedMethod,
-                    onBack = { currentStep = 1 }
+                    onBack = { currentStep = 1 },
+                    strings = strings,
+                    language = language
                 )
             }
         }
@@ -184,7 +316,8 @@ fun EggTimerApp() {
 @Composable
 fun EggLevelSelector(
     selectedLevel: EggLevel,
-    onLevelSelected: (EggLevel) -> Unit
+    onLevelSelected: (EggLevel) -> Unit,
+    language: AppLanguage
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -193,7 +326,8 @@ fun EggLevelSelector(
             EggLevelCard(
                 level = level,
                 isSelected = selectedLevel == level,
-                onClick = { onLevelSelected(level) }
+                onClick = { onLevelSelected(level) },
+                language = language
             )
         }
     }
@@ -203,7 +337,8 @@ fun EggLevelSelector(
 fun EggLevelCard(
     level: EggLevel,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    language: AppLanguage
 ) {
     Card(
         onClick = onClick,
@@ -227,13 +362,13 @@ fun EggLevelCard(
         ) {
             Column {
                 Text(
-                    text = level.displayName,
+                    text = level.displayName(language),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF5D4037)
                 )
                 Text(
-                    text = level.description,
+                    text = level.description(language),
                     fontSize = 14.sp,
                     color = Color(0xFF8D6E63)
                 )
@@ -250,7 +385,8 @@ fun EggLevelCard(
 @Composable
 fun CookingMethodSelector(
     selectedMethod: CookingMethod,
-    onMethodSelected: (CookingMethod) -> Unit
+    onMethodSelected: (CookingMethod) -> Unit,
+    language: AppLanguage
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -259,7 +395,8 @@ fun CookingMethodSelector(
             CookingMethodCard(
                 method = method,
                 isSelected = selectedMethod == method,
-                onClick = { onMethodSelected(method) }
+                onClick = { onMethodSelected(method) },
+                language = language
             )
         }
     }
@@ -269,7 +406,8 @@ fun CookingMethodSelector(
 fun CookingMethodCard(
     method: CookingMethod,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    language: AppLanguage
 ) {
     Card(
         onClick = onClick,
@@ -295,13 +433,13 @@ fun CookingMethodCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = method.displayName,
+                    text = method.displayName(language),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF5D4037)
                 )
                 Text(
-                    text = method.description,
+                    text = method.description(language),
                     fontSize = 12.sp,
                     color = Color(0xFF8D6E63),
                     modifier = Modifier.padding(top = 4.dp)
@@ -320,7 +458,9 @@ fun CookingMethodCard(
 fun TimerScreen(
     level: EggLevel,
     method: CookingMethod,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    strings: LocalizedStrings,
+    language: AppLanguage
 ) {
     val context = LocalContext.current
     
@@ -423,17 +563,17 @@ fun TimerScreen(
                 .rotate(rotationAngle)
                 .padding(bottom = 16.dp)
         )
-        
+
         Text(
-            text = "${level.displayName} Yumurta",
+            text = "${level.displayName(language)} ${strings.eggLabel}",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF5D4037),
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        
+
         Text(
-            text = method.displayName,
+            text = method.displayName(language),
             fontSize = 16.sp,
             color = Color(0xFF8D6E63),
             modifier = Modifier.padding(bottom = 8.dp)
@@ -442,7 +582,7 @@ fun TimerScreen(
         // Süre bilgisi
         val minutes = totalSeconds / 60
         Text(
-            text = "Toplam süre: $minutes dakika",
+            text = strings.totalTimeLabel(minutes),
             fontSize = 14.sp,
             color = Color(0xFF9E9E9E),
             modifier = Modifier.padding(bottom = 8.dp)
@@ -469,7 +609,7 @@ fun TimerScreen(
                         fontSize = 48.sp
                     )
                     Text(
-                        text = "Yumurta hazır!",
+                        text = strings.timerReadyTitle,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFC62828),
@@ -477,7 +617,7 @@ fun TimerScreen(
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                     )
                     Text(
-                        text = "Afiyet olsun! 🍳",
+                        text = strings.timerReadySubtitle,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFE91E63),
@@ -513,7 +653,7 @@ fun TimerScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        text = if (timeLeft == 0) "Hazır!" else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
+                        text = if (timeLeft == 0) strings.readyLabel else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF5D4037)
@@ -535,17 +675,17 @@ fun TimerScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF757575)
                 ),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
-    Text(
-                    text = "Geri",
+                Text(
+                    text = strings.backLabel,
                     fontSize = 16.sp,
                     color = Color.White
                 )
             }
-            
+
             Button(
-                onClick = { 
+                onClick = {
                     isRunning = !isRunning
                     if (timeLeft == 0) {
                         timeLeft = totalSeconds
@@ -557,10 +697,14 @@ fun TimerScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isRunning) Color(0xFFFF5722) else Color(0xFFFF9800)
                 ),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
             ) {
                 Text(
-                    text = if (isRunning) "Duraklat" else if (timeLeft == 0) "Tekrar" else "Başla",
+                    text = when {
+                        isRunning -> strings.pauseLabel
+                        timeLeft == 0 -> strings.restartLabel
+                        else -> strings.startLabel
+                    },
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -571,24 +715,52 @@ fun TimerScreen(
 }
 
 enum class EggLevel(
-    val displayName: String,
-    val description: String,
     val emoji: String,
+    val turkishName: String,
+    val englishName: String,
+    val turkishDescription: String,
+    val englishDescription: String,
     val timeInMinutes: Int
 ) {
-    SOFT("Rafadan", "Akışkan sarı", "🍳", 0),  // Süre yönteme göre değişiyor
-    MEDIUM("Kayısı", "Kremamsı sarı", "🥚", 0),  // Süre yönteme göre değişiyor
-    HARD("Sert", "Tam pişmiş", "🥞", 0)  // Süre yönteme göre değişiyor
+    SOFT("🍳", "Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
+    MEDIUM("🥚", "Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
+    HARD("🥞", "Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
 }
 
 enum class CookingMethod(
-    val displayName: String,
-    val description: String,
-    val emoji: String
+    val emoji: String,
+    val turkishName: String,
+    val englishName: String,
+    val turkishDescription: String,
+    val englishDescription: String
 ) {
-    BOILING_WATER("Kaynar Suya At", "Su kaynadıktan sonra yumurtayı atın", "🔥"),
-    COLD_WATER("Suyla Beraber Kaynat", "Soğuk suyla beraber başlayın", "💧")
+    BOILING_WATER(
+        "🔥",
+        "Kaynar Suya At",
+        "Drop into boiling water",
+        "Su kaynadıktan sonra yumurtayı atın",
+        "Add the egg after the water boils"
+    ),
+    COLD_WATER(
+        "💧",
+        "Suyla Beraber Kaynat",
+        "Start with cold water",
+        "Soğuk suyla beraber başlayın",
+        "Begin heating with the egg in cold water"
+    )
 }
+
+fun EggLevel.displayName(language: AppLanguage): String =
+    if (language == AppLanguage.TURKISH) turkishName else englishName
+
+fun EggLevel.description(language: AppLanguage): String =
+    if (language == AppLanguage.TURKISH) turkishDescription else englishDescription
+
+fun CookingMethod.displayName(language: AppLanguage): String =
+    if (language == AppLanguage.TURKISH) turkishName else englishName
+
+fun CookingMethod.description(language: AppLanguage): String =
+    if (language == AppLanguage.TURKISH) turkishDescription else englishDescription
 
 @Preview(showBackground = true)
 @Composable
