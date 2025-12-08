@@ -6,21 +6,34 @@ plugins {
 
 android {
     namespace = "com.example.eggtimer"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.eggtimer"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // TODO: Create keystore file and add signing configuration
+            // storeFile = file("path/to/keystore.jks")
+            // storePassword = "your-store-password"
+            // keyAlias = "your-key-alias"
+            // keyPassword = "your-key-password"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // TODO: Uncomment after creating signing config
+            // signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
