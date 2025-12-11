@@ -466,11 +466,6 @@ fun EggLevelCard(
                     color = Color(0xFF8D6E63)
                 )
             }
-            
-            Text(
-                text = level.emoji,
-                fontSize = 32.sp
-            )
         }
     }
 }
@@ -617,30 +612,35 @@ fun TimerScreen(
             return@LaunchedEffect
         }
 
+        // Titreşimi başlat - sürekli tekrarlayan pattern
         try {
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             activeVibrator = vibrator
             vibrator?.let { v ->
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    // Sürekli tekrarlayan titreşim: 800ms titreşim, 300ms bekleme
+                    val pattern = longArrayOf(0, 800, 300)
                     v.vibrate(
                         VibrationEffect.createWaveform(
-                            longArrayOf(0, 500, 200, 500, 200, 500),
-                            0
+                            pattern,
+                            0 // 0 = baştan sürekli tekrar
                         )
                     )
                 } else {
                     @Suppress("DEPRECATION")
-                    v.vibrate(longArrayOf(0, 500, 200, 500, 200, 500), 0)
+                    // Eski API için uzun süreli titreşim
+                    v.vibrate(10000) // 10 saniye titreşim
                 }
             }
         } catch (_: Exception) {
         }
 
+        // Alarm sesini sürekli çal - alarmTriggered false olana kadar
         try {
-            val toneGenerator = ToneGenerator(android.media.AudioManager.STREAM_ALARM, 80)
-            repeat(3) {
-                toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 400)
-                kotlinx.coroutines.delay(300)
+            val toneGenerator = ToneGenerator(android.media.AudioManager.STREAM_ALARM, 100)
+            while (alarmTriggered && timeLeft == 0) {
+                toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 600)
+                kotlinx.coroutines.delay(1000) // Her 1 saniyede bir çal
             }
             toneGenerator.release()
         } catch (_: Exception) {
@@ -715,19 +715,31 @@ fun TimerScreen(
                             .rotate(rotationAngle)
                     )
 
-                    Text(
-                        text = if (timeLeft == 0) strings.timerReadyTitle else "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5D4037)
-                    )
+                    if (timeLeft == 0) {
+                        Text(
+                            text = strings.timerReadyTitle,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5D4037),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 28.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5D4037)
+                        )
 
-                    Text(
-                        text = if (timeLeft == 0) strings.readyLabel else strings.eggLabel,
-                        fontSize = 16.sp,
-                        color = Color(0xFF6D4C41),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                        Text(
+                            text = strings.eggLabel,
+                            fontSize = 16.sp,
+                            color = Color(0xFF6D4C41),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         }
