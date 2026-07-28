@@ -14,12 +14,12 @@
 -keep class kotlin.coroutines.** { *; }
 
 # Keep data classes used for localization
--keep class com.example.eggtimer.LocalizedStrings { *; }
--keep class com.example.eggtimer.AppLanguage { *; }
+-keep class com.ferhatcangeyik.eggtimer.LocalizedStrings { *; }
+-keep class com.ferhatcangeyik.eggtimer.AppLanguage { *; }
 
 # Keep enum classes
--keep enum com.example.eggtimer.EggLevel { *; }
--keep enum com.example.eggtimer.CookingMethod { *; }
+-keep enum com.ferhatcangeyik.eggtimer.EggLevel { *; }
+-keep enum com.ferhatcangeyik.eggtimer.CookingMethod { *; }
 
 # Keep MainActivity
--keep class com.example.eggtimer.MainActivity { *; }
+-keep class com.ferhatcangeyik.eggtimer.MainActivity { *; }

@@ -1,15 +1,26 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
+// Keystore bilgileri git'e girmez; kök dizindeki keystore.properties dosyasından okunur.
+// Dosya yoksa (ör. CI ortamı) release imzasız derlenir, debug etkilenmez.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
-    namespace = "com.example.eggtimer"
+    namespace = "com.ferhatcangeyik.eggtimer"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.eggtimer"
+        applicationId = "com.ferhatcangeyik.eggtimer"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -20,11 +31,12 @@ android {
 
     signingConfigs {
         create("release") {
-            // TODO: Create keystore file and add signing configuration
-            // storeFile = file("path/to/keystore.jks")
-            // storePassword = "your-store-password"
-            // keyAlias = "your-key-alias"
-            // keyPassword = "your-key-password"
+            if (keystorePropertiesFile.exists()) {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
@@ -32,8 +44,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            // TODO: Uncomment after creating signing config
-            // signingConfig = signingConfigs.getByName("release")
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -49,7 +62,6 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 }
 

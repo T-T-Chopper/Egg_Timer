@@ -1,4 +1,4 @@
-package com.example.eggtimer
+package com.ferhatcangeyik.eggtimer
 
 import android.app.Activity
 import android.content.Context
@@ -81,20 +81,20 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.example.eggtimer.ui.theme.EggBrown
-import com.example.eggtimer.ui.theme.EggBrownDark
-import com.example.eggtimer.ui.theme.EggBrownDarkest
-import com.example.eggtimer.ui.theme.EggBrownLight
-import com.example.eggtimer.ui.theme.EggBrownMedium
-import com.example.eggtimer.ui.theme.EggCream
-import com.example.eggtimer.ui.theme.EggGray
-import com.example.eggtimer.ui.theme.EggGreen
-import com.example.eggtimer.ui.theme.EggGreenLight
-import com.example.eggtimer.ui.theme.EggOrange
-import com.example.eggtimer.ui.theme.EggOrangeDeep
-import com.example.eggtimer.ui.theme.EggRed
-import com.example.eggtimer.ui.theme.EggSelected
-import com.example.eggtimer.ui.theme.EggTimerTheme
+import com.ferhatcangeyik.eggtimer.ui.theme.EggBrown
+import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDark
+import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDarkest
+import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownLight
+import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownMedium
+import com.ferhatcangeyik.eggtimer.ui.theme.EggCream
+import com.ferhatcangeyik.eggtimer.ui.theme.EggGray
+import com.ferhatcangeyik.eggtimer.ui.theme.EggGreen
+import com.ferhatcangeyik.eggtimer.ui.theme.EggGreenLight
+import com.ferhatcangeyik.eggtimer.ui.theme.EggOrange
+import com.ferhatcangeyik.eggtimer.ui.theme.EggOrangeDeep
+import com.ferhatcangeyik.eggtimer.ui.theme.EggRed
+import com.ferhatcangeyik.eggtimer.ui.theme.EggSelected
+import com.ferhatcangeyik.eggtimer.ui.theme.EggTimerTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -209,7 +209,6 @@ data class LocalizedStrings(
     val startLabel: String,
     val pauseLabel: String,
     val restartLabel: String,
-    val testLabel: String,
     val timerReadyTitle: String,
     val timerReadySubtitle: String,
     val readyLabel: String,
@@ -232,7 +231,6 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Başla",
         pauseLabel = "Duraklat",
         restartLabel = "Tekrar",
-        testLabel = "Test (3 sn)",
         timerReadyTitle = "Yumurta hazır!",
         timerReadySubtitle = "Afiyet olsun!",
         readyLabel = "Hazır!",
@@ -254,7 +252,6 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Start",
         pauseLabel = "Pause",
         restartLabel = "Restart",
-        testLabel = "Test (3s)",
         timerReadyTitle = "Egg is ready!",
         timerReadySubtitle = "Enjoy your meal!",
         readyLabel = "Ready!",
@@ -660,7 +657,6 @@ fun TimerScreen(
     var isRunning by remember { mutableStateOf(false) }
     var alarmTriggered by remember { mutableStateOf(false) }
     var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
-    var isTestMode by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -678,11 +674,10 @@ fun TimerScreen(
     LaunchedEffect(level, method) {
         isRunning = false
         alarmTriggered = false
-        isTestMode = false
         timeLeft = baseTotalSeconds
     }
 
-    LaunchedEffect(isRunning, baseTotalSeconds, isTestMode) {
+    LaunchedEffect(isRunning, baseTotalSeconds) {
         if (!isRunning) return@LaunchedEffect
 
         while (isRunning && timeLeft > 0) {
@@ -751,11 +746,10 @@ fun TimerScreen(
 
     val isDone = alarmTriggered && timeLeft == 0
     val rotationAngle = if (isDone) rotation else 0f
-    val activeTotalSeconds = if (isTestMode) 3 else baseTotalSeconds
 
     // Kalan süre oranı — halka bu değerle dolar, renk turuncudan kırmızıya kayar
     val progress by animateFloatAsState(
-        targetValue = if (activeTotalSeconds > 0) timeLeft.toFloat() / activeTotalSeconds else 0f,
+        targetValue = if (baseTotalSeconds > 0) timeLeft.toFloat() / baseTotalSeconds else 0f,
         animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
         label = "timer_progress"
     )
@@ -780,7 +774,7 @@ fun TimerScreen(
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        val minutes = activeTotalSeconds / 60
+        val minutes = baseTotalSeconds / 60
         Text(
             text = strings.totalTimeLabel(minutes),
             fontSize = 14.sp,
@@ -910,8 +904,7 @@ fun TimerScreen(
 
             Button(
                 onClick = {
-                    isTestMode = false
-                    if (timeLeft == 0 || timeLeft == 3) {
+                    if (timeLeft == 0) {
                         timeLeft = baseTotalSeconds
                         alarmTriggered = false
                     }
@@ -935,33 +928,6 @@ fun TimerScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
-            }
-
-            // Test butonu sadece debug build'de görünür, Play Store sürümünde yoktur
-            if (BuildConfig.DEBUG) {
-                Button(
-                    onClick = {
-                        isRunning = false
-                        alarmTriggered = false
-                        isTestMode = true
-                        timeLeft = 3
-                        isRunning = true
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = EggGreen
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text(
-                        text = strings.testLabel,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
             }
         }
     }
