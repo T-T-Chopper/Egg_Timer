@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing - asla commit edilmemeli
+keystore.properties
+*.jks
+*.keystore

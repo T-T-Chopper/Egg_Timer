@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Egg Timer</string>
-    <!-- Privacy Policy URL - Replace with your actual privacy policy URL -->
-    <string name="privacy_policy_url">https://yourwebsite.com/privacy-policy</string>
+    <!-- Privacy Policy URL - GitHub Pages üzerinden yayınlanır (repo Settings > Pages) -->
+    <string name="privacy_policy_url">https://t-t-chopper.github.io/Egg_Timer/privacy-policy.html</string>
 </resources>

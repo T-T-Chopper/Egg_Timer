@@ -1,4 +1,4 @@
-package com.example.eggtimer.ui.theme
+package com.ferhatcangeyik.eggtimer.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

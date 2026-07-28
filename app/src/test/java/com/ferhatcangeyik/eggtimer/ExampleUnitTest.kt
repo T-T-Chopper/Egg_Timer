@@ -1,4 +1,4 @@
-package com.example.eggtimer
+package com.ferhatcangeyik.eggtimer
 
 import org.junit.Test
 
