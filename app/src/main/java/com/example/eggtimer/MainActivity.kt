@@ -10,12 +10,21 @@ import android.os.Vibrator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +37,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -49,8 +60,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -63,6 +81,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.example.eggtimer.ui.theme.EggBrown
+import com.example.eggtimer.ui.theme.EggBrownDark
+import com.example.eggtimer.ui.theme.EggBrownDarkest
+import com.example.eggtimer.ui.theme.EggBrownLight
+import com.example.eggtimer.ui.theme.EggBrownMedium
+import com.example.eggtimer.ui.theme.EggCream
+import com.example.eggtimer.ui.theme.EggGray
+import com.example.eggtimer.ui.theme.EggGreen
+import com.example.eggtimer.ui.theme.EggGreenLight
+import com.example.eggtimer.ui.theme.EggOrange
+import com.example.eggtimer.ui.theme.EggOrangeDeep
+import com.example.eggtimer.ui.theme.EggRed
+import com.example.eggtimer.ui.theme.EggSelected
 import com.example.eggtimer.ui.theme.EggTimerTheme
 
 class MainActivity : ComponentActivity() {
@@ -95,13 +126,13 @@ fun LanguageMenu(
     ) {
         Text(
             text = strings.languageLabel,
-            color = Color(0xFF4E342E),
+            color = EggBrownDark,
             fontWeight = FontWeight.SemiBold
         )
 
         Text(
             text = language.label,
-            color = Color(0xFF795548)
+            color = EggBrownLight
         )
 
         Box {
@@ -109,7 +140,7 @@ fun LanguageMenu(
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = strings.settingsContentDescription,
-                    tint = Color(0xFF4E342E)
+                    tint = EggBrownDark
                 )
             }
 
@@ -262,7 +293,7 @@ fun EggTimerApp() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFEF5E7))
+            .background(EggCream)
     ) {
         LanguageMenu(
             language = language,
@@ -285,123 +316,176 @@ fun EggTimerApp() {
                 text = strings.appTitle,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF3E2723),
+                color = EggBrownDarkest,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 28.dp)
+                modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            when (currentStep) {
-                0 -> {
-                    Text(
-                        text = strings.levelQuestion,
-                        fontSize = 18.sp,
-                        color = Color(0xFF4E342E),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    )
+            StepIndicator(
+                currentStep = currentStep,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
 
-                    EggLevelSelector(
-                        selectedLevel = selectedLevel,
-                        onLevelSelected = { selectedLevel = it },
-                        language = language
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = { currentStep = 1 },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFA726)
-                        ),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text(
-                            text = strings.continueLabel,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+            AnimatedContent(
+                targetState = currentStep,
+                transitionSpec = {
+                    // İleri giderken sağdan, geri dönerken soldan kaydır
+                    if (targetState > initialState) {
+                        (slideInHorizontally { it / 3 } + fadeIn()) togetherWith
+                            (slideOutHorizontally { -it / 3 } + fadeOut())
+                    } else {
+                        (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
+                            (slideOutHorizontally { it / 3 } + fadeOut())
                     }
-                }
-
-                1 -> {
-                    Text(
-                        text = strings.methodQuestion,
-                        fontSize = 18.sp,
-                        color = Color(0xFF4E342E),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    )
-
-                    Text(
-                        text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
-                        fontSize = 14.sp,
-                        color = Color(0xFF6D4C41),
-                        modifier = Modifier.padding(bottom = 14.dp)
-                    )
-
-                    CookingMethodSelector(
-                        selectedMethod = selectedMethod,
-                        onMethodSelected = { selectedMethod = it },
-                        language = language
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = { currentStep = 0 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF8D6E63)
-                            ),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
+                },
+                label = "step_transition"
+            ) { step ->
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    when (step) {
+                        0 -> {
                             Text(
-                                text = strings.backLabel,
-                                fontSize = 16.sp,
-                                color = Color.White
+                                text = strings.levelQuestion,
+                                fontSize = 18.sp,
+                                color = EggBrownDark,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(bottom = 20.dp)
                             )
+
+                            EggLevelSelector(
+                                selectedLevel = selectedLevel,
+                                onLevelSelected = { selectedLevel = it },
+                                language = language
+                            )
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Button(
+                                onClick = { currentStep = 1 },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = EggOrange
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Text(
+                                    text = strings.continueLabel,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
 
-                        Button(
-                            onClick = { currentStep = 2 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFFA726)
-                            ),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
+                        1 -> {
                             Text(
-                                text = strings.startLabel,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                text = strings.methodQuestion,
+                                fontSize = 18.sp,
+                                color = EggBrownDark,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(bottom = 20.dp)
+                            )
+
+                            Text(
+                                text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
+                                fontSize = 14.sp,
+                                color = EggBrownMedium,
+                                modifier = Modifier.padding(bottom = 14.dp)
+                            )
+
+                            CookingMethodSelector(
+                                selectedMethod = selectedMethod,
+                                onMethodSelected = { selectedMethod = it },
+                                language = language
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = { currentStep = 0 },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = EggBrownLight
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Text(
+                                        text = strings.backLabel,
+                                        fontSize = 16.sp,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Button(
+                                    onClick = { currentStep = 2 },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = EggOrange
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Text(
+                                        text = strings.startLabel,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+
+                        2 -> {
+                            TimerScreen(
+                                level = selectedLevel,
+                                method = selectedMethod,
+                                onBack = { currentStep = 1 },
+                                strings = strings,
+                                language = language
                             )
                         }
                     }
-                }
-
-                2 -> {
-                    TimerScreen(
-                        level = selectedLevel,
-                        method = selectedMethod,
-                        onBack = { currentStep = 1 },
-                        strings = strings,
-                        language = language
-                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun StepIndicator(
+    currentStep: Int,
+    modifier: Modifier = Modifier,
+    stepCount: Int = 3
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(stepCount) { index ->
+            val isActive = index == currentStep
+            val dotWidth by animateDpAsState(
+                targetValue = if (isActive) 24.dp else 8.dp,
+                label = "step_dot_width"
+            )
+            Box(
+                modifier = Modifier
+                    .height(8.dp)
+                    .width(dotWidth)
+                    .clip(CircleShape)
+                    .background(if (isActive) EggOrange else EggSelected)
+            )
         }
     }
 }
@@ -439,7 +523,7 @@ fun EggLevelCard(
             .fillMaxWidth()
             .height(80.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFFFCC80) else Color.White
+            containerColor = if (isSelected) EggSelected else Color.White
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 4.dp
@@ -458,12 +542,12 @@ fun EggLevelCard(
                     text = level.displayName(language),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5D4037)
+                    color = EggBrown
                 )
                 Text(
                     text = level.description(language),
                     fontSize = 14.sp,
-                    color = Color(0xFF8D6E63)
+                    color = EggBrownLight
                 )
             }
         }
@@ -503,7 +587,7 @@ fun CookingMethodCard(
             .fillMaxWidth()
             .height(100.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFFFCC80) else Color.White
+            containerColor = if (isSelected) EggSelected else Color.White
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 4.dp
@@ -524,12 +608,12 @@ fun CookingMethodCard(
                     text = method.displayName(language),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5D4037)
+                    color = EggBrown
                 )
                 Text(
                     text = method.description(language),
                     fontSize = 12.sp,
-                    color = Color(0xFF8D6E63),
+                    color = EggBrownLight,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -582,6 +666,13 @@ fun TimerScreen(
         onDispose {
             activeVibrator?.cancel()
         }
+    }
+
+    // Zamanlayıcı çalışırken ekranın kararmasını engelle
+    val view = LocalView.current
+    DisposableEffect(isRunning) {
+        view.keepScreenOn = isRunning
+        onDispose { view.keepScreenOn = false }
     }
 
     LaunchedEffect(level, method) {
@@ -658,8 +749,17 @@ fun TimerScreen(
         label = "egg_rotation"
     )
 
-    val rotationAngle = if (alarmTriggered && timeLeft == 0) rotation else 0f
+    val isDone = alarmTriggered && timeLeft == 0
+    val rotationAngle = if (isDone) rotation else 0f
     val activeTotalSeconds = if (isTestMode) 3 else baseTotalSeconds
+
+    // Kalan süre oranı — halka bu değerle dolar, renk turuncudan kırmızıya kayar
+    val progress by animateFloatAsState(
+        targetValue = if (activeTotalSeconds > 0) timeLeft.toFloat() / activeTotalSeconds else 0f,
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "timer_progress"
+    )
+    val ringColor = if (isDone) EggGreen else lerp(EggRed, EggOrange, progress)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -669,14 +769,14 @@ fun TimerScreen(
             text = level.displayName(language),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF5D4037),
+            color = EggBrown,
             modifier = Modifier.padding(bottom = 4.dp)
         )
 
         Text(
             text = method.displayName(language),
             fontSize = 16.sp,
-            color = Color(0xFF8D6E63),
+            color = EggBrownLight,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -684,22 +784,51 @@ fun TimerScreen(
         Text(
             text = strings.totalTimeLabel(minutes),
             fontSize = 14.sp,
-            color = Color(0xFF9E9E9E),
+            color = EggGray,
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        Card(
+        Box(
             modifier = Modifier
-                .size(220.dp)
-                .padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (alarmTriggered && timeLeft == 0) Color(0xFFE8F5E9) else Color(0xFFFFFFFF)
-            ),
-            shape = RoundedCornerShape(24.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .padding(bottom = 24.dp)
+                .size(250.dp),
+            contentAlignment = Alignment.Center
         ) {
+            // Kalan süreyi gösteren ilerleme halkası
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeWidth = 12.dp.toPx()
+                val inset = strokeWidth / 2
+                val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
+
+                drawArc(
+                    color = EggSelected.copy(alpha = 0.35f),
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                )
+
+                drawArc(
+                    color = ringColor,
+                    startAngle = -90f,
+                    sweepAngle = if (isDone) 360f else 360f * progress,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = arcSize,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                )
+            }
+
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .size(202.dp)
+                    .shadow(elevation = 8.dp, shape = CircleShape)
+                    .background(
+                        color = if (isDone) EggGreenLight else Color.White,
+                        shape = CircleShape
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -710,45 +839,45 @@ fun TimerScreen(
                         contentDescription = strings.eggLabel,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
-                            .size(96.dp)
-                            .padding(bottom = 12.dp)
+                            .size(88.dp)
+                            .padding(bottom = 8.dp)
                             .rotate(rotationAngle)
                     )
 
                     if (timeLeft == 0) {
                         Text(
                             text = strings.timerReadyTitle,
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5D4037),
+                            color = EggBrown,
                             textAlign = TextAlign.Center,
-                            lineHeight = 28.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp)
+                            lineHeight = 26.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     } else {
                         Text(
                             text = "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5D4037)
+                            color = EggBrown
                         )
 
                         Text(
                             text = strings.eggLabel,
                             fontSize = 16.sp,
-                            color = Color(0xFF6D4C41),
-                            modifier = Modifier.padding(top = 8.dp)
+                            color = EggBrownMedium,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }
             }
         }
 
-        if (alarmTriggered && timeLeft == 0) {
+        if (isDone) {
             Text(
                 text = strings.timerReadySubtitle,
                 fontSize = 16.sp,
-                color = Color(0xFF6D4C41),
+                color = EggBrownMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -768,7 +897,7 @@ fun TimerScreen(
                     .weight(1f)
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF757575)
+                    containerColor = EggBrownLight
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -792,7 +921,7 @@ fun TimerScreen(
                     .weight(1f)
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRunning) Color(0xFFFF5722) else Color(0xFFFF9800)
+                    containerColor = if (isRunning) EggOrangeDeep else EggOrange
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -808,44 +937,46 @@ fun TimerScreen(
                 )
             }
 
-            Button(
-                onClick = {
-                    isRunning = false
-                    alarmTriggered = false
-                    isTestMode = true
-                    timeLeft = 3
-                    isRunning = true
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50)
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = strings.testLabel,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+            // Test butonu sadece debug build'de görünür, Play Store sürümünde yoktur
+            if (BuildConfig.DEBUG) {
+                Button(
+                    onClick = {
+                        isRunning = false
+                        alarmTriggered = false
+                        isTestMode = true
+                        timeLeft = 3
+                        isRunning = true
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EggGreen
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = strings.testLabel,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
         }
     }
 }
 
 enum class EggLevel(
-    val emoji: String,
     val turkishName: String,
     val englishName: String,
     val turkishDescription: String,
     val englishDescription: String,
     val timeInMinutes: Int
 ) {
-    SOFT("🍳", "Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
-    MEDIUM("🥚", "Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
-    HARD("🥞", "Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
+    SOFT("Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
+    MEDIUM("Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
+    HARD("Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
 }
 
 enum class CookingMethod(
