@@ -550,11 +550,6 @@ fun EggLevelCard(
                     color = EggBrownLight
                 )
             }
-
-            Text(
-                text = level.emoji,
-                fontSize = 36.sp
-            )
         }
     }
 }
@@ -973,16 +968,15 @@ fun TimerScreen(
 }
 
 enum class EggLevel(
-    val emoji: String,
     val turkishName: String,
     val englishName: String,
     val turkishDescription: String,
     val englishDescription: String,
     val timeInMinutes: Int
 ) {
-    SOFT("🍳", "Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
-    MEDIUM("🥚", "Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
-    HARD("💪", "Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
+    SOFT("Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
+    MEDIUM("Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
+    HARD("Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
 }
 
 enum class CookingMethod(
