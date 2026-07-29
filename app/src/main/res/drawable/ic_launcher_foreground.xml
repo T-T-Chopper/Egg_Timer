@@ -1,30 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Uyarlanabilir ikon ön planı.
+  Çizim 512x512 koordinat uzayında tasarlandı; dış grup bunu 108dp tuvalin
+  ortasındaki güvenli alana (yaklaşık 68dp çap) ölçekleyip taşır.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.1635"
+        android:scaleY="0.1635"
+        android:translateX="-202"
+        android:translateY="-202">
+
+        <!-- geri sayım halkası -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M 256,66 A 190,190 0 1 1 68.9,223"
+            android:strokeColor="#F79233"
+            android:strokeLineCap="round"
+            android:strokeWidth="34" />
+
+        <!-- halka boşluğunda küçülen iz noktaları -->
+        <path
+            android:fillColor="#FFCC80"
+            android:pathData="M162.7,83.8 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0" />
+        <path
+            android:fillColor="#FFD79B"
+            android:pathData="M111.7,121.7 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+        <path
+            android:fillColor="#FFE3B8"
+            android:pathData="M76.8,175.7 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+
+        <!-- halkanın ucundaki kırmızı zaman noktası -->
+        <path
+            android:fillColor="#E53935"
+            android:pathData="M45.9,223 a23,23 0 1,0 46,0 a23,23 0 1,0 -46,0" />
+
+        <!-- yumurta gölgesi -->
+        <path
+            android:fillAlpha="0.55"
+            android:fillColor="#E3CBA4"
+            android:pathData="M168,404 a88,15 0 1,0 176,0 a88,15 0 1,0 -176,0" />
+
+        <group
+            android:pivotX="256"
+            android:pivotY="270"
+            android:rotation="-6">
+
+            <!-- yumurta gövdesi -->
+            <path
+                android:fillColor="#FFF8EE"
+                android:pathData="M256,140 C190,140 160,230 160,290 C160,360 205,396 256,396 C307,396 352,360 352,290 C352,230 322,140 256,140 Z"
+                android:strokeColor="#EFD9BC"
+                android:strokeWidth="4" />
+
+            <!-- parlama -->
+            <group
+                android:pivotX="215"
+                android:pivotY="205"
+                android:rotation="-18">
+                <path
+                    android:fillAlpha="0.65"
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M189,205 a26,40 0 1,0 52,0 a26,40 0 1,0 -52,0" />
+            </group>
+
+            <!-- gözler -->
+            <path
+                android:fillColor="#4E342E"
+                android:pathData="M215,278 a9,13 0 1,0 18,0 a9,13 0 1,0 -18,0" />
+            <path
+                android:fillColor="#4E342E"
+                android:pathData="M279,278 a9,13 0 1,0 18,0 a9,13 0 1,0 -18,0" />
+
+            <!-- gülümseme -->
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M238,306 Q256,322 274,306"
+                android:strokeColor="#4E342E"
+                android:strokeLineCap="round"
+                android:strokeWidth="7" />
+
+            <!-- yanaklar -->
+            <path
+                android:fillAlpha="0.9"
+                android:fillColor="#FFCC80"
+                android:pathData="M185,303 a15,9 0 1,0 30,0 a15,9 0 1,0 -30,0" />
+            <path
+                android:fillAlpha="0.9"
+                android:fillColor="#FFCC80"
+                android:pathData="M297,303 a15,9 0 1,0 30,0 a15,9 0 1,0 -30,0" />
+        </group>
+    </group>
 </vector>
