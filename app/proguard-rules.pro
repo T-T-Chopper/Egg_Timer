@@ -23,3 +23,6 @@
 
 # Keep MainActivity
 -keep class com.ferhatcangeyik.eggtimer.MainActivity { *; }
+
+# Keep the alarm receiver: it is instantiated by the system from the manifest
+-keep class com.ferhatcangeyik.eggtimer.AlarmReceiver { *; }

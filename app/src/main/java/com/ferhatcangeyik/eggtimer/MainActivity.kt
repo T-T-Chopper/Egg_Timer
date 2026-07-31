@@ -1,15 +1,21 @@
 package com.ferhatcangeyik.eggtimer
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -78,9 +84,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ferhatcangeyik.eggtimer.ui.theme.EggBrown
 import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDark
 import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDarkest
@@ -100,6 +109,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ensureAlarmChannel(this, localizedStrings(storedLanguage(this)))
         setContent {
             EggTimerTheme {
                 EggTimerApp()
@@ -215,7 +225,9 @@ data class LocalizedStrings(
     val enterFullscreenLabel: String,
     val exitFullscreenLabel: String,
     val totalTimeLabel: (Int) -> String,
-    val eggLabel: String
+    val eggLabel: String,
+    val notificationChannelName: String,
+    val notificationChannelDescription: String
 )
 
 fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) {
@@ -237,7 +249,9 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         enterFullscreenLabel = "Tam ekran",
         exitFullscreenLabel = "Tam ekrandan çık",
         totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
-        eggLabel = "Yumurta"
+        eggLabel = "Yumurta",
+        notificationChannelName = "Yumurta alarmı",
+        notificationChannelDescription = "Zamanlayıcı bittiğinde çalar"
     )
 
     AppLanguage.ENGLISH -> LocalizedStrings(
@@ -258,13 +272,32 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         enterFullscreenLabel = "Enter fullscreen",
         exitFullscreenLabel = "Exit fullscreen",
         totalTimeLabel = { minutes -> "Total time: $minutes min" },
-        eggLabel = "Egg"
+        eggLabel = "Egg",
+        notificationChannelName = "Egg alarm",
+        notificationChannelDescription = "Rings when the timer finishes"
     )
 }
 
 private fun SharedPreferences.loadLanguage(): AppLanguage {
     val saved = getString(PREF_SELECTED_LANGUAGE, AppLanguage.TURKISH.name)
     return AppLanguage.values().firstOrNull { it.name == saved } ?: AppLanguage.TURKISH
+}
+
+/** Compose dışından (alarm alıcısı, bildirim kanalı) seçili dile erişmek için. */
+fun storedLanguage(context: Context): AppLanguage =
+    context.getSharedPreferences("EggTimerPrefs", Context.MODE_PRIVATE).loadLanguage()
+
+/**
+ * Compose'un [Context]'i bir sarmalayıcı olabilir; yaşam döngüsüne erişmek için
+ * zinciri gerçek activity'ye kadar takip ederiz.
+ */
+private fun Context.findComponentActivity(): ComponentActivity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is ComponentActivity) return current
+        current = current.baseContext
+    }
+    return null
 }
 
 @Composable
@@ -274,9 +307,13 @@ fun EggTimerApp() {
         context.getSharedPreferences("EggTimerPrefs", Context.MODE_PRIVATE)
     }
 
-    var selectedLevel by remember { mutableStateOf(EggLevel.SOFT) }
-    var selectedMethod by remember { mutableStateOf(CookingMethod.BOILING_WATER) }
-    var currentStep by remember { mutableStateOf(0) } // 0: seviye seçimi, 1: yöntem seçimi, 2: zamanlayıcı
+    // Kaydedilmiş bir zamanlayıcı varsa doğrudan onun ekranıyla açılırız;
+    // uygulama kapatılmış olsa bile kullanıcı süreyi kaybetmez.
+    val savedSession = remember { TimerStore(context).load() }
+
+    var selectedLevel by remember { mutableStateOf(savedSession?.level ?: EggLevel.SOFT) }
+    var selectedMethod by remember { mutableStateOf(savedSession?.method ?: CookingMethod.BOILING_WATER) }
+    var currentStep by remember { mutableStateOf(if (savedSession != null) 2 else 0) } // 0: seviye seçimi, 1: yöntem seçimi, 2: zamanlayıcı
     var language by remember {
         mutableStateOf(preferences.loadLanguage())
     }
@@ -653,15 +690,76 @@ fun TimerScreen(
         }
     }
 
-    var timeLeft by remember { mutableStateOf(baseTotalSeconds) }
-    var isRunning by remember { mutableStateOf(false) }
-    var alarmTriggered by remember { mutableStateOf(false) }
+    val store = remember { TimerStore(context) }
+
+    // Kayıtlı oturum yalnızca aynı seçim içinse geri yüklenir; kullanıcı
+    // pişirme seçimini değiştirdiyse zamanlayıcı sıfırdan başlar.
+    val saved = remember(level, method) {
+        store.load()?.takeIf { it.level == level && it.method == method }
+    }
+    val restoredRemaining = remember(level, method) {
+        when {
+            saved == null -> baseTotalSeconds
+            saved.isRunning -> secondsUntil(saved.endAt)
+            else -> saved.remainingSeconds
+        }
+    }
+
+    // Zamanlayıcı bir sayaç değil, bir bitiş anı: kalan süre her zaman
+    // saatten hesaplanır, böylece arka planda da doğru işler.
+    var endAt by remember(level, method) {
+        mutableStateOf(if (saved?.isRunning == true) saved.endAt else 0L)
+    }
+    var timeLeft by remember(level, method) { mutableStateOf(restoredRemaining) }
+    var isRunning by remember(level, method) {
+        mutableStateOf(saved?.isRunning == true && restoredRemaining > 0)
+    }
+    // Süresi dolmuş bir oturum geri yüklendiyse alarm yeniden çalar: kullanıcı
+    // telefonun başına döndüğünde yumurtanın beklediğini görmeli.
+    var alarmTriggered by remember(level, method) {
+        mutableStateOf(saved != null && restoredRemaining == 0)
+    }
     var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
+
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Reddedilirse arka plan bildirimi çıkmaz; zamanlayıcı yine çalışır. */ }
 
     DisposableEffect(Unit) {
         onDispose {
             activeVibrator?.cancel()
         }
+    }
+
+    // Uygulama arka plana alınınca alarmı kur, geri dönülünce iptal edip
+    // kalan süreyi saatten tazele. Böylece iki uyarı üst üste binmez.
+    val activity = remember(context) { context.findComponentActivity() }
+    DisposableEffect(activity, isRunning, endAt) {
+        val lifecycle = activity?.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP ->
+                    if (isRunning && endAt > System.currentTimeMillis()) {
+                        EggAlarm.schedule(context, endAt)
+                    }
+
+                Lifecycle.Event.ON_START -> {
+                    EggAlarm.cancel(context)
+                    if (isRunning) {
+                        val remaining = secondsUntil(endAt)
+                        timeLeft = remaining
+                        if (remaining == 0) {
+                            isRunning = false
+                            alarmTriggered = true
+                        }
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
     }
 
     // Zamanlayıcı çalışırken ekranın kararmasını engelle
@@ -671,24 +769,21 @@ fun TimerScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    LaunchedEffect(level, method) {
-        isRunning = false
-        alarmTriggered = false
-        timeLeft = baseTotalSeconds
-    }
-
-    LaunchedEffect(isRunning, baseTotalSeconds) {
+    LaunchedEffect(isRunning, endAt) {
         if (!isRunning) return@LaunchedEffect
 
-        while (isRunning && timeLeft > 0) {
-            kotlinx.coroutines.delay(1000)
-            timeLeft -= 1
+        while (true) {
+            val remaining = secondsUntil(endAt)
+            timeLeft = remaining
+            if (remaining == 0) break
+            kotlinx.coroutines.delay(200)
         }
 
-        if (isRunning && timeLeft == 0) {
-            isRunning = false
-            alarmTriggered = true
-        }
+        isRunning = false
+        alarmTriggered = true
+        // Bitiş anını saklamaya devam ederiz: eskiyen oturumlar bu sayede
+        // bir süre sonra kendiliğinden temizlenir.
+        store.save(TimerSession(level, method, endAt, 0, false))
     }
 
     LaunchedEffect(alarmTriggered) {
@@ -886,7 +981,12 @@ fun TimerScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
-                onClick = onBack,
+                onClick = {
+                    isRunning = false
+                    EggAlarm.cancel(context)
+                    store.clear()
+                    onBack()
+                },
                 modifier = Modifier
                     .weight(1f)
                     .height(56.dp),
@@ -904,11 +1004,30 @@ fun TimerScreen(
 
             Button(
                 onClick = {
-                    if (timeLeft == 0) {
-                        timeLeft = baseTotalSeconds
+                    if (isRunning) {
+                        val remaining = secondsUntil(endAt)
+                        isRunning = false
+                        timeLeft = remaining
+                        endAt = 0L
+                        EggAlarm.cancel(context)
+                        store.save(TimerSession(level, method, 0L, remaining, false))
+                    } else {
+                        val startFrom = if (timeLeft <= 0) baseTotalSeconds else timeLeft
                         alarmTriggered = false
+                        timeLeft = startFrom
+                        endAt = System.currentTimeMillis() + startFrom * 1000L
+                        isRunning = true
+                        store.save(TimerSession(level, method, endAt, startFrom, true))
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
-                    isRunning = !isRunning
                 },
                 modifier = Modifier
                     .weight(1f)
