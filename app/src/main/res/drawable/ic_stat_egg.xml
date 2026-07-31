@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Durum çubuğu simgesi: Android bunu tek renge indirger, bu yüzden düz siluet. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <group
+        android:pivotX="256"
+        android:pivotY="268"
+        android:scaleX="0.078"
+        android:scaleY="0.078"
+        android:translateX="-244"
+        android:translateY="-256">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M256,140 C190,140 160,230 160,290 C160,360 205,396 256,396 C307,396 352,360 352,290 C352,230 322,140 256,140 Z" />
+    </group>
+</vector>
