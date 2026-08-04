@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 const val ALARM_CHANNEL_ID = "egg_timer_alarm"
 private const val ALARM_NOTIFICATION_ID = 1001
 private const val ALARM_REQUEST_CODE = 42
+private const val SHOW_REQUEST_CODE = 43
 
 private val ALARM_VIBRATION_PATTERN = longArrayOf(0, 800, 300, 800, 300, 800)
 
@@ -37,15 +38,29 @@ object EggAlarm {
         val manager = context.getSystemService(AlarmManager::class.java) ?: return
         val pending = pendingIntent(context)
 
-        // Tam zamanlı alarm izni yoksa yaklaşık alarma düşeriz: uyku modunda
-        // birkaç dakika sapabilir ama zamanlayıcı yine de çalar.
+        // setAlarmClock, sistemin gerçek çalar saat mekanizması: Doze modunda
+        // ve üreticilerin pil optimizasyonlarında bile en yüksek önceliğe
+        // sahiptir, durum çubuğunda alarm simgesi gösterir. Sıradan exact
+        // alarmların aksine görevlerden kaydırılan uygulamalarda da güvenilir
+        // biçimde tetiklenir.
         val canBeExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             manager.canScheduleExactAlarms()
 
         try {
             if (canBeExact) {
-                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pending)
+                val showApp = PendingIntent.getActivity(
+                    context,
+                    SHOW_REQUEST_CODE,
+                    Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                manager.setAlarmClock(
+                    AlarmManager.AlarmClockInfo(triggerAtMillis, showApp),
+                    pending
+                )
             } else {
+                // Tam zamanlı alarm izni yoksa yaklaşık alarma düşeriz: uyku
+                // modunda birkaç dakika sapabilir ama zamanlayıcı yine de çalar.
                 manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pending)
             }
         } catch (_: SecurityException) {
@@ -126,6 +141,9 @@ class AlarmReceiver : BroadcastReceiver() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setContentIntent(openApp)
+            // Kilitli ekranda bile uygulamayı öne getirir; açılan uygulama
+            // "hazır" durumunu görüp kendi döngülü alarmını çalar.
+            .setFullScreenIntent(openApp, true)
             .setVibrate(ALARM_VIBRATION_PATTERN)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
             .build()
