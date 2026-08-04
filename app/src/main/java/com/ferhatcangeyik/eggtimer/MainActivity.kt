@@ -219,6 +219,7 @@ data class LocalizedStrings(
     val startLabel: String,
     val pauseLabel: String,
     val restartLabel: String,
+    val testLabel: String,
     val timerReadyTitle: String,
     val timerReadySubtitle: String,
     val readyLabel: String,
@@ -243,6 +244,7 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Başla",
         pauseLabel = "Duraklat",
         restartLabel = "Tekrar",
+        testLabel = "Test (30 sn)",
         timerReadyTitle = "Yumurta hazır!",
         timerReadySubtitle = "Afiyet olsun!",
         readyLabel = "Hazır!",
@@ -266,6 +268,7 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         startLabel = "Start",
         pauseLabel = "Pause",
         restartLabel = "Restart",
+        testLabel = "Test (30s)",
         timerReadyTitle = "Egg is ready!",
         timerReadySubtitle = "Enjoy your meal!",
         readyLabel = "Ready!",
@@ -721,9 +724,24 @@ fun TimerScreen(
     }
     var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
 
+    // Çalışan turun toplam süresi: ilerleme halkası bunun üzerinden dolar.
+    // Normalde pişirme süresidir, hata ayıklamadaki kısa test turunda onunki.
+    var runTotalSeconds by remember(level, method) { mutableStateOf(baseTotalSeconds) }
+
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Reddedilirse arka plan bildirimi çıkmaz; zamanlayıcı yine çalışır. */ }
+
+    val ensureNotificationPermission = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -844,7 +862,7 @@ fun TimerScreen(
 
     // Kalan süre oranı — halka bu değerle dolar, renk turuncudan kırmızıya kayar
     val progress by animateFloatAsState(
-        targetValue = if (baseTotalSeconds > 0) timeLeft.toFloat() / baseTotalSeconds else 0f,
+        targetValue = if (runTotalSeconds > 0) timeLeft.toFloat() / runTotalSeconds else 0f,
         animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
         label = "timer_progress"
     )
@@ -1012,21 +1030,16 @@ fun TimerScreen(
                         EggAlarm.cancel(context)
                         store.save(TimerSession(level, method, 0L, remaining, false))
                     } else {
-                        val startFrom = if (timeLeft <= 0) baseTotalSeconds else timeLeft
+                        // Süre bittiyse baştan başlarız, duraklatılmışsa kalanı sürdürürüz
+                        val restarting = timeLeft <= 0
+                        val startFrom = if (restarting) baseTotalSeconds else timeLeft
+                        if (restarting) runTotalSeconds = baseTotalSeconds
                         alarmTriggered = false
                         timeLeft = startFrom
                         endAt = System.currentTimeMillis() + startFrom * 1000L
                         isRunning = true
                         store.save(TimerSession(level, method, endAt, startFrom, true))
-
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.POST_NOTIFICATIONS
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
+                        ensureNotificationPermission()
                     }
                 },
                 modifier = Modifier
@@ -1048,9 +1061,43 @@ fun TimerScreen(
                     color = Color.White
                 )
             }
+
+            // Kısa test turu: arka plan alarmını 5 dakika beklemeden denemek
+            // için. Yalnızca hata ayıklama derlemesinde görünür, Play'e giden
+            // sürümde bu blok tamamen derlenmez.
+            if (BuildConfig.DEBUG) {
+                Button(
+                    onClick = {
+                        alarmTriggered = false
+                        runTotalSeconds = DEBUG_TEST_SECONDS
+                        timeLeft = DEBUG_TEST_SECONDS
+                        endAt = System.currentTimeMillis() + DEBUG_TEST_SECONDS * 1000L
+                        isRunning = true
+                        store.save(TimerSession(level, method, endAt, DEBUG_TEST_SECONDS, true))
+                        ensureNotificationPermission()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EggGreen
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = strings.testLabel,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
         }
     }
 }
+
+/** Hata ayıklamadaki test turunun süresi: uygulamayı kapatmaya yetecek kadar. */
+private const val DEBUG_TEST_SECONDS = 30
 
 enum class EggLevel(
     val turkishName: String,
