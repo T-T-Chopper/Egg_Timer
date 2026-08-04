@@ -62,6 +62,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG ile hata ayıklamaya özel test kısayolunu ayırmak için
+        buildConfig = true
     }
 }
 
