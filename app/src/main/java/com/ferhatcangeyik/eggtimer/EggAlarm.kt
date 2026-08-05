@@ -21,6 +21,9 @@ const val ALARM_CHANNEL_ID = "egg_timer_alarm"
 private const val ALARM_NOTIFICATION_ID = 1001
 private const val ALARM_REQUEST_CODE = 42
 private const val SHOW_REQUEST_CODE = 43
+private const val DISMISS_REQUEST_CODE = 44
+
+private const val ACTION_DISMISS = "com.ferhatcangeyik.eggtimer.DISMISS_ALARM"
 
 private val ALARM_VIBRATION_PATTERN = longArrayOf(0, 800, 300, 800, 300, 800)
 
@@ -112,6 +115,13 @@ class AlarmReceiver : BroadcastReceiver() {
     // İzin aşağıda açıkça kontrol ediliyor; lint koşulu tanımıyor.
     @SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_DISMISS) {
+            NotificationManagerCompat.from(context).cancel(ALARM_NOTIFICATION_ID)
+            // Uyarı karşılandı: uygulama açıldığında alarm yeniden çalmasın
+            TimerStore(context).clearSession()
+            return
+        }
+
         val strings = localizedStrings(storedLanguage(context))
         ensureAlarmChannel(context, strings)
 
@@ -133,6 +143,15 @@ class AlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Bildirimi açmadan susturabilmek için: uygulamayı öne getirmeye gerek
+        // kalmadan alarmı kapatır.
+        val dismiss = PendingIntent.getBroadcast(
+            context,
+            DISMISS_REQUEST_CODE,
+            Intent(context, AlarmReceiver::class.java).setAction(ACTION_DISMISS),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_egg)
             .setContentTitle(strings.timerReadyTitle)
@@ -146,6 +165,7 @@ class AlarmReceiver : BroadcastReceiver() {
             .setFullScreenIntent(openApp, true)
             .setVibrate(ALARM_VIBRATION_PATTERN)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
+            .addAction(R.drawable.ic_stat_egg, strings.dismissLabel, dismiss)
             .build()
 
         NotificationManagerCompat.from(context).notify(ALARM_NOTIFICATION_ID, notification)
