@@ -17,9 +17,12 @@
 -keep class com.ferhatcangeyik.eggtimer.LocalizedStrings { *; }
 -keep class com.ferhatcangeyik.eggtimer.AppLanguage { *; }
 
-# Keep enum classes
+# Keep enum classes: their constant names are written to SharedPreferences,
+# so renaming them would break saved timers and preferences
 -keep enum com.ferhatcangeyik.eggtimer.EggLevel { *; }
 -keep enum com.ferhatcangeyik.eggtimer.CookingMethod { *; }
+-keep enum com.ferhatcangeyik.eggtimer.EggSize { *; }
+-keep enum com.ferhatcangeyik.eggtimer.EggStartTemp { *; }
 
 # Keep MainActivity
 -keep class com.ferhatcangeyik.eggtimer.MainActivity { *; }
