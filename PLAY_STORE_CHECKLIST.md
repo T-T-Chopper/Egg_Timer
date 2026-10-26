@@ -74,6 +74,23 @@ Yazılabilecek gerekçe:
 
 > Not: İzin verilmezse uygulama yaklaşık alarma düşer ve çalışmaya devam eder.
 
+**Tam ekran bildirim (USE_FULL_SCREEN_INTENT):** Süre dolduğunda kilitli
+ekranda uygulamayı öne getirmek için kullanılıyor. Android 14 ve sonrasında
+Play bu izni yalnızca alarm ve arama uygulamalarına veriyor ve aynı bölümde
+beyan istiyor:
+
+> **Politika → Uygulama içeriği → Tam ekran amacı**
+
+Seçilecek kullanım: **Alarm**. Yazılabilecek gerekçe:
+
+> Pişirme zamanlayıcısı süre dolduğunda kullanıcıyı uyaran bir alarmdır.
+> Telefon kilitliyken uyarının fark edilmesi için tam ekran bildirim
+> gösterilir; yalnızca kullanıcının başlattığı zamanlayıcı bittiğinde
+> tetiklenir.
+
+> Not: İzin verilmezse bildirim normal (açılır) bildirim olarak gelir, ses ve
+> titreşim yine çalışır.
+
 ### 5. Play Console hesabı ve listing
 
 - [ ] Google Play Developer hesabı (tek seferlik 25 USD): https://play.google.com/console
