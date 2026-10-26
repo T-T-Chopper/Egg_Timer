@@ -1,15 +1,25 @@
 package com.ferhatcangeyik.eggtimer
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -57,6 +67,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,28 +89,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.ferhatcangeyik.eggtimer.ui.theme.EggBrown
-import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDark
-import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownDarkest
-import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownLight
-import com.ferhatcangeyik.eggtimer.ui.theme.EggBrownMedium
-import com.ferhatcangeyik.eggtimer.ui.theme.EggCream
-import com.ferhatcangeyik.eggtimer.ui.theme.EggGray
-import com.ferhatcangeyik.eggtimer.ui.theme.EggGreen
-import com.ferhatcangeyik.eggtimer.ui.theme.EggGreenLight
-import com.ferhatcangeyik.eggtimer.ui.theme.EggOrange
-import com.ferhatcangeyik.eggtimer.ui.theme.EggOrangeDeep
-import com.ferhatcangeyik.eggtimer.ui.theme.EggRed
-import com.ferhatcangeyik.eggtimer.ui.theme.EggSelected
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ferhatcangeyik.eggtimer.ui.theme.EggTimerTheme
+import com.ferhatcangeyik.eggtimer.ui.theme.LocalEggColors
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ensureAlarmChannel(this, localizedStrings(storedLanguage(this)))
         setContent {
             EggTimerTheme {
                 EggTimerApp()
@@ -110,6 +115,18 @@ class MainActivity : ComponentActivity() {
 
 private const val PREF_SELECTED_LANGUAGE = "selected_language"
 
+private const val STEP_LEVEL = 0
+private const val STEP_METHOD = 1
+private const val STEP_DETAILS = 2
+private const val STEP_TIMER = 3
+private const val STEP_COUNT = 4
+
+/** Uygulama içi alarmın kendi kendine susmadan önce çalacağı süre. */
+private const val ALARM_MAX_DURATION_MS = 60_000L
+
+/** Hata ayıklamadaki test turunun süresi: uygulamayı kapatmaya yetecek kadar. */
+private const val DEBUG_TEST_SECONDS = 30
+
 @Composable
 fun LanguageMenu(
     language: AppLanguage,
@@ -117,6 +134,7 @@ fun LanguageMenu(
     onLanguageSelected: (AppLanguage) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalEggColors.current
     var expanded by remember { mutableStateOf(false) }
 
     Row(
@@ -126,13 +144,13 @@ fun LanguageMenu(
     ) {
         Text(
             text = strings.languageLabel,
-            color = EggBrownDark,
+            color = colors.body,
             fontWeight = FontWeight.SemiBold
         )
 
         Text(
             text = language.label,
-            color = EggBrownLight
+            color = colors.muted
         )
 
         Box {
@@ -140,7 +158,7 @@ fun LanguageMenu(
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = strings.settingsContentDescription,
-                    tint = EggBrownDark
+                    tint = colors.body
                 )
             }
 
@@ -148,7 +166,7 @@ fun LanguageMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                AppLanguage.values().forEach { option ->
+                AppLanguage.entries.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option.label) },
                         onClick = {
@@ -204,18 +222,28 @@ data class LocalizedStrings(
     val levelQuestion: String,
     val continueLabel: String,
     val methodQuestion: String,
+    val detailsQuestion: String,
+    val sizeLabel: String,
+    val startTempLabel: String,
     val selectedLabel: String,
     val backLabel: String,
     val startLabel: String,
     val pauseLabel: String,
     val restartLabel: String,
+    val testLabel: String,
+    val dismissLabel: String,
     val timerReadyTitle: String,
     val timerReadySubtitle: String,
+    val iceBathTip: String,
     val readyLabel: String,
     val enterFullscreenLabel: String,
     val exitFullscreenLabel: String,
     val totalTimeLabel: (Int) -> String,
-    val eggLabel: String
+    val eggLabel: String,
+    val notificationChannelName: String,
+    val notificationChannelDescription: String,
+    val notificationsOffWarning: String,
+    val openSettingsLabel: String
 )
 
 fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) {
@@ -226,18 +254,28 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         levelQuestion = "Yumurtanızı nasıl pişirmek istiyorsunuz?",
         continueLabel = "Devam Et",
         methodQuestion = "Pişirme yönteminizi seçin",
+        detailsQuestion = "Yumurtanız hakkında",
+        sizeLabel = "Boy",
+        startTempLabel = "Başlangıç",
         selectedLabel = "Seçilen",
         backLabel = "Geri",
         startLabel = "Başla",
         pauseLabel = "Duraklat",
         restartLabel = "Tekrar",
+        testLabel = "Test (30 sn)",
+        dismissLabel = "Sustur",
         timerReadyTitle = "Yumurta hazır!",
         timerReadySubtitle = "Afiyet olsun!",
+        iceBathTip = "Pişmeyi durdurup kabuğu kolay soymak için soğuk suya alın",
         readyLabel = "Hazır!",
         enterFullscreenLabel = "Tam ekran",
         exitFullscreenLabel = "Tam ekrandan çık",
         totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
-        eggLabel = "Yumurta"
+        eggLabel = "Yumurta",
+        notificationChannelName = "Yumurta alarmı",
+        notificationChannelDescription = "Zamanlayıcı bittiğinde çalar",
+        notificationsOffWarning = "Bildirimler kapalı: uygulama kapalıyken süre dolunca alarm duyulmaz.",
+        openSettingsLabel = "Ayarları aç"
     )
 
     AppLanguage.ENGLISH -> LocalizedStrings(
@@ -247,50 +285,124 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         levelQuestion = "How would you like your egg cooked?",
         continueLabel = "Continue",
         methodQuestion = "Choose your cooking method",
+        detailsQuestion = "About your egg",
+        sizeLabel = "Size",
+        startTempLabel = "Starting from",
         selectedLabel = "Selected",
         backLabel = "Back",
         startLabel = "Start",
         pauseLabel = "Pause",
         restartLabel = "Restart",
+        testLabel = "Test (30s)",
+        dismissLabel = "Dismiss",
         timerReadyTitle = "Egg is ready!",
         timerReadySubtitle = "Enjoy your meal!",
+        iceBathTip = "Move it to cold water to stop cooking and peel it easily",
         readyLabel = "Ready!",
         enterFullscreenLabel = "Enter fullscreen",
         exitFullscreenLabel = "Exit fullscreen",
         totalTimeLabel = { minutes -> "Total time: $minutes min" },
-        eggLabel = "Egg"
+        eggLabel = "Egg",
+        notificationChannelName = "Egg alarm",
+        notificationChannelDescription = "Rings when the timer finishes",
+        notificationsOffWarning = "Notifications are off: the alarm won't sound while the app is closed.",
+        openSettingsLabel = "Open settings"
     )
 }
 
 private fun SharedPreferences.loadLanguage(): AppLanguage {
-    val saved = getString(PREF_SELECTED_LANGUAGE, AppLanguage.TURKISH.name)
-    return AppLanguage.values().firstOrNull { it.name == saved } ?: AppLanguage.TURKISH
+    val saved = getString(PREF_SELECTED_LANGUAGE, null)
+    return AppLanguage.entries.firstOrNull { it.name == saved } ?: systemDefaultLanguage()
+}
+
+/**
+ * Kullanıcı henüz dil seçmediyse telefonun diline uyarız: Play'den İngilizce
+ * bir telefona kurulan uygulama Türkçe açılmasın.
+ */
+private fun systemDefaultLanguage(): AppLanguage =
+    if (Locale.getDefault().language == "tr") AppLanguage.TURKISH else AppLanguage.ENGLISH
+
+/** API 31+ VibratorManager üzerinden, öncesinde eski servis adıyla titreşim motoru. */
+private fun Context.defaultVibrator(): Vibrator? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+private fun Context.notificationsEnabled(): Boolean =
+    NotificationManagerCompat.from(this).areNotificationsEnabled()
+
+private fun Context.openNotificationSettings() {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    startActivity(intent)
+}
+
+/** Compose dışından (alarm alıcısı, bildirim kanalı) seçili dile erişmek için. */
+fun storedLanguage(context: Context): AppLanguage =
+    context.getSharedPreferences("EggTimerPrefs", Context.MODE_PRIVATE).loadLanguage()
+
+/**
+ * Compose'un [Context]'i bir sarmalayıcı olabilir; yaşam döngüsüne erişmek için
+ * zinciri gerçek activity'ye kadar takip ederiz.
+ */
+private fun Context.findComponentActivity(): ComponentActivity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is ComponentActivity) return current
+        current = current.baseContext
+    }
+    return null
 }
 
 @Composable
 fun EggTimerApp() {
     val context = LocalContext.current
+    val colors = LocalEggColors.current
     val preferences = remember {
         context.getSharedPreferences("EggTimerPrefs", Context.MODE_PRIVATE)
     }
+    val store = remember { TimerStore(context) }
 
-    var selectedLevel by remember { mutableStateOf(EggLevel.SOFT) }
-    var selectedMethod by remember { mutableStateOf(CookingMethod.BOILING_WATER) }
-    var currentStep by remember { mutableStateOf(0) } // 0: seviye seçimi, 1: yöntem seçimi, 2: zamanlayıcı
-    var language by remember {
-        mutableStateOf(preferences.loadLanguage())
+    // Çalışan bir zamanlayıcı varsa doğrudan onun ekranıyla açılırız; yoksa
+    // son kullanılan seçim hazır gelir, kullanıcı hızlıca geçebilir.
+    val savedSession = remember { store.load() }
+    val initialChoice = remember { savedSession?.choice ?: store.lastChoice() }
+
+    // rememberSaveable: ekran döndürülünce ya da sistem teması değişince
+    // activity yeniden kurulur; seçimler ve bulunulan adım kaybolmasın.
+    var selectedLevel by rememberSaveable { mutableStateOf(initialChoice.level) }
+    var selectedMethod by rememberSaveable { mutableStateOf(initialChoice.method) }
+    var selectedSize by rememberSaveable { mutableStateOf(initialChoice.size) }
+    var selectedStartTemp by rememberSaveable { mutableStateOf(initialChoice.startTemp) }
+    var currentStep by rememberSaveable {
+        mutableStateOf(if (savedSession != null) STEP_TIMER else STEP_LEVEL)
     }
+
+    // Seçim adımlarında sistem geri hareketi bir önceki adıma döner. İlk
+    // adımda ve zamanlayıcıda varsayılan davranış (uygulamadan çıkış) kalır:
+    // çalışan zamanlayıcı arka planda sürer, yanlışlıkla durdurulmaz.
+    BackHandler(enabled = currentStep == STEP_METHOD || currentStep == STEP_DETAILS) {
+        currentStep -= 1
+    }
+    var language by remember { mutableStateOf(preferences.loadLanguage()) }
+
     val onLanguageSelected: (AppLanguage) -> Unit = { selected ->
         language = selected
         preferences.edit().putString(PREF_SELECTED_LANGUAGE, selected.name).apply()
     }
     val strings = localizedStrings(language)
+    val choice = CookingChoice(selectedLevel, selectedMethod, selectedSize, selectedStartTemp)
+
     FullscreenEffect(isFullscreen = true)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(EggCream)
+            .background(colors.background)
     ) {
         LanguageMenu(
             language = language,
@@ -313,7 +425,7 @@ fun EggTimerApp() {
                 text = strings.appTitle,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
-                color = EggBrownDarkest,
+                color = colors.title,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -342,47 +454,40 @@ fun EggTimerApp() {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     when (step) {
-                        0 -> {
+                        STEP_LEVEL -> {
                             Text(
                                 text = strings.levelQuestion,
                                 fontSize = 18.sp,
-                                color = EggBrownDark,
+                                color = colors.body,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(bottom = 20.dp)
                             )
 
-                            EggLevelSelector(
-                                selectedLevel = selectedLevel,
-                                onLevelSelected = { selectedLevel = it },
-                                language = language
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                EggLevel.entries.forEach { level ->
+                                    EggLevelCard(
+                                        level = level,
+                                        isSelected = selectedLevel == level,
+                                        onClick = { selectedLevel = level },
+                                        language = language
+                                    )
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(24.dp))
 
-                            Button(
-                                onClick = { currentStep = 1 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = EggOrange
-                                ),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text(
-                                    text = strings.continueLabel,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
+                            PrimaryButton(
+                                text = strings.continueLabel,
+                                onClick = { currentStep = STEP_METHOD },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
 
-                        1 -> {
+                        STEP_METHOD -> {
                             Text(
                                 text = strings.methodQuestion,
                                 fontSize = 18.sp,
-                                color = EggBrownDark,
+                                color = colors.body,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(bottom = 20.dp)
                             )
@@ -390,15 +495,20 @@ fun EggTimerApp() {
                             Text(
                                 text = "${strings.selectedLabel}: ${selectedLevel.displayName(language)}",
                                 fontSize = 14.sp,
-                                color = EggBrownMedium,
+                                color = colors.muted,
                                 modifier = Modifier.padding(bottom = 14.dp)
                             )
 
-                            CookingMethodSelector(
-                                selectedMethod = selectedMethod,
-                                onMethodSelected = { selectedMethod = it },
-                                language = language
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                CookingMethod.entries.forEach { method ->
+                                    CookingMethodCard(
+                                        method = method,
+                                        isSelected = selectedMethod == method,
+                                        onClick = { selectedMethod = method },
+                                        language = language
+                                    )
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(20.dp))
 
@@ -406,48 +516,95 @@ fun EggTimerApp() {
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Button(
-                                    onClick = { currentStep = 0 },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = EggBrownLight
-                                    ),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Text(
-                                        text = strings.backLabel,
-                                        fontSize = 16.sp,
-                                        color = Color.White
-                                    )
-                                }
-
-                                Button(
-                                    onClick = { currentStep = 2 },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = EggOrange
-                                    ),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Text(
-                                        text = strings.startLabel,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
+                                NeutralButton(
+                                    text = strings.backLabel,
+                                    onClick = { currentStep = STEP_LEVEL },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                PrimaryButton(
+                                    text = strings.continueLabel,
+                                    onClick = { currentStep = STEP_DETAILS },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
 
-                        2 -> {
+                        STEP_DETAILS -> {
+                            Text(
+                                text = strings.detailsQuestion,
+                                fontSize = 18.sp,
+                                color = colors.body,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            // Seçim değiştikçe süre anında güncellensin: kullanıcı
+                            // boyun ve sıcaklığın etkisini burada görür.
+                            Text(
+                                text = strings.totalTimeLabel(choice.totalSeconds / 60),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.accent,
+                                modifier = Modifier.padding(bottom = 18.dp)
+                            )
+
+                            OptionGroupLabel(strings.sizeLabel)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                EggSize.entries.forEach { size ->
+                                    CompactChoiceCard(
+                                        title = size.displayName(language),
+                                        subtitle = size.description(language),
+                                        isSelected = selectedSize == size,
+                                        onClick = { selectedSize = size },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OptionGroupLabel(strings.startTempLabel)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                EggStartTemp.entries.forEach { temp ->
+                                    CompactChoiceCard(
+                                        title = temp.displayName(language),
+                                        subtitle = temp.description(language),
+                                        isSelected = selectedStartTemp == temp,
+                                        onClick = { selectedStartTemp = temp },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                NeutralButton(
+                                    text = strings.backLabel,
+                                    onClick = { currentStep = STEP_METHOD },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                PrimaryButton(
+                                    text = strings.startLabel,
+                                    onClick = { currentStep = STEP_TIMER },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        STEP_TIMER -> {
                             TimerScreen(
-                                level = selectedLevel,
-                                method = selectedMethod,
-                                onBack = { currentStep = 1 },
+                                choice = choice,
+                                onBack = { currentStep = STEP_DETAILS },
                                 strings = strings,
                                 language = language
                             )
@@ -463,8 +620,10 @@ fun EggTimerApp() {
 fun StepIndicator(
     currentStep: Int,
     modifier: Modifier = Modifier,
-    stepCount: Int = 3
+    stepCount: Int = STEP_COUNT
 ) {
+    val colors = LocalEggColors.current
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -481,27 +640,108 @@ fun StepIndicator(
                     .height(8.dp)
                     .width(dotWidth)
                     .clip(CircleShape)
-                    .background(if (isActive) EggOrange else EggSelected)
+                    .background(if (isActive) colors.accent else colors.ringTrack)
             )
         }
     }
 }
 
 @Composable
-fun EggLevelSelector(
-    selectedLevel: EggLevel,
-    onLevelSelected: (EggLevel) -> Unit,
-    language: AppLanguage
+private fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val colors = LocalEggColors.current
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+        shape = RoundedCornerShape(14.dp)
     ) {
-        EggLevel.values().forEach { level ->
-            EggLevelCard(
-                level = level,
-                isSelected = selectedLevel == level,
-                onClick = { onLevelSelected(level) },
-                language = language
+        Text(
+            text = text,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.onAccent
+        )
+    }
+}
+
+@Composable
+private fun NeutralButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalEggColors.current
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.neutralButton),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 16.sp,
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+private fun OptionGroupLabel(text: String) {
+    val colors = LocalEggColors.current
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = colors.muted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun CompactChoiceCard(
+    title: String,
+    subtitle: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalEggColors.current
+    Card(
+        onClick = onClick,
+        modifier = modifier.height(70.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) colors.surfaceSelected else colors.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 8.dp else 4.dp
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.bodyStrong,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                color = colors.muted,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -514,13 +754,14 @@ fun EggLevelCard(
     onClick: () -> Unit,
     language: AppLanguage
 ) {
+    val colors = LocalEggColors.current
     Card(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) EggSelected else Color.White
+            containerColor = if (isSelected) colors.surfaceSelected else colors.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 4.dp
@@ -539,34 +780,14 @@ fun EggLevelCard(
                     text = level.displayName(language),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = EggBrown
+                    color = colors.bodyStrong
                 )
                 Text(
                     text = level.description(language),
                     fontSize = 14.sp,
-                    color = EggBrownLight
+                    color = colors.muted
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun CookingMethodSelector(
-    selectedMethod: CookingMethod,
-    onMethodSelected: (CookingMethod) -> Unit,
-    language: AppLanguage
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        CookingMethod.values().forEach { method ->
-            CookingMethodCard(
-                method = method,
-                isSelected = selectedMethod == method,
-                onClick = { onMethodSelected(method) },
-                language = language
-            )
         }
     }
 }
@@ -578,13 +799,14 @@ fun CookingMethodCard(
     onClick: () -> Unit,
     language: AppLanguage
 ) {
+    val colors = LocalEggColors.current
     Card(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(100.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) EggSelected else Color.White
+            containerColor = if (isSelected) colors.surfaceSelected else colors.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 8.dp else 4.dp
@@ -598,23 +820,21 @@ fun CookingMethodCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = method.displayName(language),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = EggBrown
+                    color = colors.bodyStrong
                 )
                 Text(
                     text = method.description(language),
                     fontSize = 12.sp,
-                    color = EggBrownLight,
+                    color = colors.muted,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
-            
+
             Text(
                 text = method.emoji,
                 fontSize = 40.sp
@@ -625,43 +845,106 @@ fun CookingMethodCard(
 
 @Composable
 fun TimerScreen(
-    level: EggLevel,
-    method: CookingMethod,
+    choice: CookingChoice,
     onBack: () -> Unit,
     strings: LocalizedStrings,
     language: AppLanguage
 ) {
     val context = LocalContext.current
+    val colors = LocalEggColors.current
+    val store = remember { TimerStore(context) }
 
-    val baseTotalSeconds = remember(level, method) {
-        when (method) {
-            CookingMethod.BOILING_WATER -> {
-                when (level) {
-                    EggLevel.SOFT -> 5 * 60
-                    EggLevel.MEDIUM -> 7 * 60
-                    EggLevel.HARD -> 10 * 60
-                }
-            }
+    val baseTotalSeconds = choice.totalSeconds
 
-            CookingMethod.COLD_WATER -> {
-                when (level) {
-                    EggLevel.SOFT -> 9 * 60
-                    EggLevel.MEDIUM -> 12 * 60
-                    EggLevel.HARD -> 15 * 60
-                }
-            }
+    // Kayıtlı oturum yalnızca aynı seçim içinse geri yüklenir; kullanıcı
+    // seçimini değiştirdiyse zamanlayıcı sıfırdan başlar.
+    val saved = remember(choice) {
+        store.load()?.takeIf { it.choice == choice }
+    }
+    val restoredRemaining = remember(choice) {
+        when {
+            saved == null -> baseTotalSeconds
+            saved.isRunning -> secondsUntil(saved.endAt)
+            else -> saved.remainingSeconds
         }
     }
 
-    var timeLeft by remember { mutableStateOf(baseTotalSeconds) }
-    var isRunning by remember { mutableStateOf(false) }
-    var alarmTriggered by remember { mutableStateOf(false) }
+    // Zamanlayıcı bir sayaç değil, bir bitiş anı: kalan süre her zaman
+    // saatten hesaplanır, böylece arka planda da doğru işler.
+    var endAt by remember(choice) {
+        mutableStateOf(if (saved?.isRunning == true) saved.endAt else 0L)
+    }
+    var timeLeft by remember(choice) { mutableStateOf(restoredRemaining) }
+    var isRunning by remember(choice) {
+        mutableStateOf(saved?.isRunning == true && restoredRemaining > 0)
+    }
+    // Süresi dolmuş bir oturum geri yüklendiyse alarm yeniden çalar: kullanıcı
+    // telefonun başına döndüğünde yumurtanın beklediğini görmeli.
+    var alarmTriggered by remember(choice) {
+        mutableStateOf(saved != null && restoredRemaining == 0)
+    }
     var activeVibrator by remember { mutableStateOf<Vibrator?>(null) }
+
+    // Çalışan turun toplam süresi: ilerleme halkası bunun üzerinden dolar.
+    // Normalde pişirme süresidir, hata ayıklamadaki kısa test turunda onunki.
+    var runTotalSeconds by remember(choice) { mutableStateOf(baseTotalSeconds) }
+
+    // Bildirimler kapalıysa arka plan alarmı sessizce başarısız olur; kullanıcı
+    // bunu bilmeli. İzin sonradan ayarlardan da değişebileceği için her
+    // ön plana dönüşte yeniden okunur.
+    var notificationsOn by remember { mutableStateOf(context.notificationsEnabled()) }
+
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { notificationsOn = context.notificationsEnabled() }
+
+    val ensureNotificationPermission = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
             activeVibrator?.cancel()
         }
+    }
+
+    // Uygulama arka plana alınınca alarmı kur, geri dönülünce iptal edip
+    // kalan süreyi saatten tazele. Böylece iki uyarı üst üste binmez.
+    val activity = remember(context) { context.findComponentActivity() }
+    DisposableEffect(activity, isRunning, endAt) {
+        val lifecycle = activity?.lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP ->
+                    if (isRunning && endAt > System.currentTimeMillis()) {
+                        EggAlarm.schedule(context, endAt)
+                    }
+
+                Lifecycle.Event.ON_START -> {
+                    EggAlarm.cancel(context)
+                    notificationsOn = context.notificationsEnabled()
+                    if (isRunning) {
+                        val remaining = secondsUntil(endAt)
+                        timeLeft = remaining
+                        if (remaining == 0) {
+                            isRunning = false
+                            alarmTriggered = true
+                        }
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
     }
 
     // Zamanlayıcı çalışırken ekranın kararmasını engelle
@@ -671,24 +954,21 @@ fun TimerScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    LaunchedEffect(level, method) {
-        isRunning = false
-        alarmTriggered = false
-        timeLeft = baseTotalSeconds
-    }
-
-    LaunchedEffect(isRunning, baseTotalSeconds) {
+    LaunchedEffect(isRunning, endAt) {
         if (!isRunning) return@LaunchedEffect
 
-        while (isRunning && timeLeft > 0) {
-            kotlinx.coroutines.delay(1000)
-            timeLeft -= 1
+        while (true) {
+            val remaining = secondsUntil(endAt)
+            timeLeft = remaining
+            if (remaining == 0) break
+            kotlinx.coroutines.delay(200)
         }
 
-        if (isRunning && timeLeft == 0) {
-            isRunning = false
-            alarmTriggered = true
-        }
+        isRunning = false
+        alarmTriggered = true
+        // Bitiş anını saklamaya devam ederiz: eskiyen oturumlar bu sayede
+        // bir süre sonra kendiliğinden temizlenir.
+        store.save(TimerSession(choice, endAt, 0, false))
     }
 
     LaunchedEffect(alarmTriggered) {
@@ -698,39 +978,41 @@ fun TimerScreen(
             return@LaunchedEffect
         }
 
-        // Titreşimi başlat - sürekli tekrarlayan pattern
         try {
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            val vibrator = context.defaultVibrator()
             activeVibrator = vibrator
             vibrator?.let { v ->
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     // Sürekli tekrarlayan titreşim: 800ms titreşim, 300ms bekleme
                     val pattern = longArrayOf(0, 800, 300)
-                    v.vibrate(
-                        VibrationEffect.createWaveform(
-                            pattern,
-                            0 // 0 = baştan sürekli tekrar
-                        )
-                    )
+                    v.vibrate(VibrationEffect.createWaveform(pattern, 0))
                 } else {
                     @Suppress("DEPRECATION")
-                    // Eski API için uzun süreli titreşim
-                    v.vibrate(10000) // 10 saniye titreşim
+                    v.vibrate(ALARM_MAX_DURATION_MS)
                 }
             }
         } catch (_: Exception) {
         }
 
-        // Alarm sesini sürekli çal - alarmTriggered false olana kadar
+        // Alarm bir dakika sonra kendiliğinden susar; "hazır" görüntüsü kalır.
+        // Sonsuza kadar çalan bir alarm hem rahatsız edici hem pil düşmanı.
         try {
             val toneGenerator = ToneGenerator(android.media.AudioManager.STREAM_ALARM, 100)
-            while (alarmTriggered && timeLeft == 0) {
+            val startedAt = System.currentTimeMillis()
+            while (
+                alarmTriggered &&
+                timeLeft == 0 &&
+                System.currentTimeMillis() - startedAt < ALARM_MAX_DURATION_MS
+            ) {
                 toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 600)
-                kotlinx.coroutines.delay(1000) // Her 1 saniyede bir çal
+                kotlinx.coroutines.delay(1000)
             }
             toneGenerator.release()
         } catch (_: Exception) {
         }
+
+        activeVibrator?.cancel()
+        activeVibrator = null
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "egg_shake")
@@ -749,42 +1031,49 @@ fun TimerScreen(
 
     // Kalan süre oranı — halka bu değerle dolar, renk turuncudan kırmızıya kayar
     val progress by animateFloatAsState(
-        targetValue = if (baseTotalSeconds > 0) timeLeft.toFloat() / baseTotalSeconds else 0f,
+        targetValue = if (runTotalSeconds > 0) timeLeft.toFloat() / runTotalSeconds else 0f,
         animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
         label = "timer_progress"
     )
-    val ringColor = if (isDone) EggGreen else lerp(EggRed, EggOrange, progress)
+    val ringColor = if (isDone) colors.success else lerp(colors.danger, colors.accent, progress)
+    val ringTrackColor = colors.ringTrack.copy(alpha = 0.35f)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = level.displayName(language),
+            text = choice.level.displayName(language),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            color = EggBrown,
+            color = colors.bodyStrong,
             modifier = Modifier.padding(bottom = 4.dp)
         )
 
         Text(
-            text = method.displayName(language),
+            text = choice.method.displayName(language),
             fontSize = 16.sp,
-            color = EggBrownLight,
-            modifier = Modifier.padding(bottom = 12.dp)
+            color = colors.muted,
+            modifier = Modifier.padding(bottom = 2.dp)
         )
 
-        val minutes = baseTotalSeconds / 60
         Text(
-            text = strings.totalTimeLabel(minutes),
+            text = "${choice.size.displayName(language)} · ${choice.startTemp.displayName(language)}",
+            fontSize = 13.sp,
+            color = colors.muted,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+
+        Text(
+            text = strings.totalTimeLabel(baseTotalSeconds / 60),
             fontSize = 14.sp,
-            color = EggGray,
-            modifier = Modifier.padding(bottom = 24.dp)
+            color = colors.muted,
+            modifier = Modifier.padding(bottom = 20.dp)
         )
 
         Box(
             modifier = Modifier
-                .padding(bottom = 24.dp)
+                .padding(bottom = 20.dp)
                 .size(250.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -795,7 +1084,7 @@ fun TimerScreen(
                 val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
 
                 drawArc(
-                    color = EggSelected.copy(alpha = 0.35f),
+                    color = ringTrackColor,
                     startAngle = -90f,
                     sweepAngle = 360f,
                     useCenter = false,
@@ -820,14 +1109,12 @@ fun TimerScreen(
                     .size(202.dp)
                     .shadow(elevation = 8.dp, shape = CircleShape)
                     .background(
-                        color = if (isDone) EggGreenLight else Color.White,
+                        color = if (isDone) colors.successSurface else colors.surface,
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
                         painter = painterResource(id = R.drawable.ic_classic_egg),
                         contentDescription = strings.eggLabel,
@@ -843,23 +1130,23 @@ fun TimerScreen(
                             text = strings.timerReadyTitle,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = EggBrown,
+                            color = colors.bodyStrong,
                             textAlign = TextAlign.Center,
                             lineHeight = 26.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     } else {
                         Text(
-                            text = "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
+                            text = "${timeLeft / 60}:${String.format(Locale.ROOT, "%02d", timeLeft % 60)}",
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Bold,
-                            color = EggBrown
+                            color = colors.bodyStrong
                         )
 
                         Text(
                             text = strings.eggLabel,
                             fontSize = 16.sp,
-                            color = EggBrownMedium,
+                            color = colors.muted,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -867,15 +1154,32 @@ fun TimerScreen(
             }
         }
 
+        if (isRunning && !notificationsOn) {
+            NotificationsOffBanner(
+                strings = strings,
+                onOpenSettings = { context.openNotificationSettings() }
+            )
+        }
+
         if (isDone) {
             Text(
                 text = strings.timerReadySubtitle,
                 fontSize = 16.sp,
-                color = EggBrownMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.bodyStrong,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text(
+                text = strings.iceBathTip,
+                fontSize = 13.sp,
+                color = colors.muted,
+                textAlign = TextAlign.Center,
+                lineHeight = 17.sp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 32.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             )
         }
 
@@ -885,36 +1189,46 @@ fun TimerScreen(
                 .padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Button(
-                onClick = onBack,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EggBrownLight
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = strings.backLabel,
-                    fontSize = 16.sp,
-                    color = Color.White
-                )
-            }
+            NeutralButton(
+                text = strings.backLabel,
+                onClick = {
+                    isRunning = false
+                    alarmTriggered = false
+                    EggAlarm.cancel(context)
+                    store.clearSession()
+                    onBack()
+                },
+                modifier = Modifier.weight(1f)
+            )
 
             Button(
                 onClick = {
-                    if (timeLeft == 0) {
-                        timeLeft = baseTotalSeconds
+                    if (isRunning) {
+                        val remaining = secondsUntil(endAt)
+                        isRunning = false
+                        timeLeft = remaining
+                        endAt = 0L
+                        EggAlarm.cancel(context)
+                        store.save(TimerSession(choice, 0L, remaining, false))
+                    } else {
+                        // Süre bittiyse baştan başlarız, duraklatılmışsa kalanı sürdürürüz
+                        val restarting = timeLeft <= 0
+                        val startFrom = if (restarting) baseTotalSeconds else timeLeft
+                        if (restarting) runTotalSeconds = baseTotalSeconds
                         alarmTriggered = false
+                        timeLeft = startFrom
+                        endAt = System.currentTimeMillis() + startFrom * 1000L
+                        isRunning = true
+                        store.save(TimerSession(choice, endAt, startFrom, true))
+                        store.saveLastChoice(choice)
+                        ensureNotificationPermission()
                     }
-                    isRunning = !isRunning
                 },
                 modifier = Modifier
                     .weight(1f)
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRunning) EggOrangeDeep else EggOrange
+                    containerColor = if (isRunning) colors.accentDeep else colors.accent
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -926,59 +1240,73 @@ fun TimerScreen(
                     },
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = colors.onAccent
                 )
+            }
+
+            // Kısa test turu: arka plan alarmını beş dakika beklemeden denemek
+            // için. Yalnızca hata ayıklama derlemesinde görünür, Play'e giden
+            // sürümde bu blok tamamen derlenmez.
+            if (BuildConfig.DEBUG) {
+                Button(
+                    onClick = {
+                        alarmTriggered = false
+                        runTotalSeconds = DEBUG_TEST_SECONDS
+                        timeLeft = DEBUG_TEST_SECONDS
+                        endAt = System.currentTimeMillis() + DEBUG_TEST_SECONDS * 1000L
+                        isRunning = true
+                        store.save(TimerSession(choice, endAt, DEBUG_TEST_SECONDS, true))
+                        ensureNotificationPermission()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.success),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = strings.testLabel,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
         }
     }
 }
 
-enum class EggLevel(
-    val turkishName: String,
-    val englishName: String,
-    val turkishDescription: String,
-    val englishDescription: String,
-    val timeInMinutes: Int
+@Composable
+private fun NotificationsOffBanner(
+    strings: LocalizedStrings,
+    onOpenSettings: () -> Unit
 ) {
-    SOFT("Rafadan", "Soft-boiled", "Akışkan sarı", "Runny yolk", 0),
-    MEDIUM("Kayısı", "Medium", "Kremamsı sarı", "Jammy yolk", 0),
-    HARD("Sert", "Hard-boiled", "Tam pişmiş", "Fully cooked", 0)
+    val colors = LocalEggColors.current
+    Card(
+        onClick = onOpenSettings,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+                text = strings.notificationsOffWarning,
+                fontSize = 13.sp,
+                color = colors.danger,
+                lineHeight = 17.sp
+            )
+            Text(
+                text = strings.openSettingsLabel,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.accent,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
 }
-
-enum class CookingMethod(
-    val emoji: String,
-    val turkishName: String,
-    val englishName: String,
-    val turkishDescription: String,
-    val englishDescription: String
-) {
-    BOILING_WATER(
-        "🔥",
-        "Kaynar Suya At",
-        "Drop into boiling water",
-        "Su kaynadıktan sonra yumurtayı atın",
-        "Add the egg after the water boils"
-    ),
-    COLD_WATER(
-        "💧",
-        "Suyla Beraber Kaynat",
-        "Start with cold water",
-        "Soğuk suyla beraber başlayın",
-        "Begin heating with the egg in cold water"
-    )
-}
-
-fun EggLevel.displayName(language: AppLanguage): String =
-    if (language == AppLanguage.TURKISH) turkishName else englishName
-
-fun EggLevel.description(language: AppLanguage): String =
-    if (language == AppLanguage.TURKISH) turkishDescription else englishDescription
-
-fun CookingMethod.displayName(language: AppLanguage): String =
-    if (language == AppLanguage.TURKISH) turkishName else englishName
-
-fun CookingMethod.description(language: AppLanguage): String =
-    if (language == AppLanguage.TURKISH) turkishDescription else englishDescription
 
 @Preview(showBackground = true)
 @Composable

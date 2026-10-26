@@ -52,8 +52,46 @@ Cihazda test için APK: `./gradlew assembleRelease`
 - [ ] Timer çalışıyor, halka doğru doluyor
 - [ ] Alarm sesi ve titreşim çalışıyor
 - [ ] Test butonu GÖRÜNMÜYOR
+- [ ] Zamanlayıcı çalışırken başka uygulamaya geçilince süre işlemeye devam ediyor
+- [ ] Uygulama görevler listesinden kapatılıp yeniden açılınca süre kaldığı yerden sürüyor
+- [ ] Arka plandayken süre dolunca bildirim geliyor ve alarm çalıyor
 
-### 4. Play Console hesabı ve listing
+### 4. Hassas izin bildirimi (USE_EXACT_ALARM)
+
+Zamanlayıcı arka plandayken alarmın dakikası dakikasına çalması için
+`USE_EXACT_ALARM` izni kullanılıyor. Play Console bu izin için kısa bir
+gerekçe isteyebilir:
+
+> **Politika → Uygulama içeriği → Tam zamanlı alarmlar**
+
+Yazılabilecek gerekçe:
+
+> Uygulamanın temel işlevi bir pişirme zamanlayıcısıdır. Kullanıcı yumurtanın
+> pişme süresini seçer ve süre dolduğunda uyarılması gerekir. Birkaç dakika
+> geciken bir alarm yumurtanın fazla pişmesine yol açacağı için tam zamanlı
+> alarm gereklidir. İzin yalnızca kullanıcının kendi başlattığı zamanlayıcı
+> için kullanılır.
+
+> Not: İzin verilmezse uygulama yaklaşık alarma düşer ve çalışmaya devam eder.
+
+**Tam ekran bildirim (USE_FULL_SCREEN_INTENT):** Süre dolduğunda kilitli
+ekranda uygulamayı öne getirmek için kullanılıyor. Android 14 ve sonrasında
+Play bu izni yalnızca alarm ve arama uygulamalarına veriyor ve aynı bölümde
+beyan istiyor:
+
+> **Politika → Uygulama içeriği → Tam ekran amacı**
+
+Seçilecek kullanım: **Alarm**. Yazılabilecek gerekçe:
+
+> Pişirme zamanlayıcısı süre dolduğunda kullanıcıyı uyaran bir alarmdır.
+> Telefon kilitliyken uyarının fark edilmesi için tam ekran bildirim
+> gösterilir; yalnızca kullanıcının başlattığı zamanlayıcı bittiğinde
+> tetiklenir.
+
+> Not: İzin verilmezse bildirim normal (açılır) bildirim olarak gelir, ses ve
+> titreşim yine çalışır.
+
+### 5. Play Console hesabı ve listing
 
 - [ ] Google Play Developer hesabı (tek seferlik 25 USD): https://play.google.com/console
 - [ ] Uygulama adı: Egg Timer / Yumurta Zamanlayıcısı
@@ -66,7 +104,7 @@ Cihazda test için APK: `./gradlew assembleRelease`
 - [ ] Privacy Policy URL: yukarıdaki GitHub Pages adresi
 - [ ] İletişim e-postası
 
-### 5. Her güncellemede
+### 6. Her güncellemede
 
 - `versionCode` +1 artır (şu an: 1)
 - `versionName` güncelle (şu an: "1.0")

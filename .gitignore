@@ -18,3 +18,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# Claude Code kişisel ayarları ve plugin dosyaları - uygulamanın parçası değil
+/.claude/
