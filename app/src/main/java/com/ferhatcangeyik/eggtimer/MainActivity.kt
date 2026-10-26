@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.ToneGenerator
@@ -11,7 +12,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -63,6 +67,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -92,6 +98,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ferhatcangeyik.eggtimer.ui.theme.EggTimerTheme
 import com.ferhatcangeyik.eggtimer.ui.theme.LocalEggColors
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -234,7 +241,9 @@ data class LocalizedStrings(
     val totalTimeLabel: (Int) -> String,
     val eggLabel: String,
     val notificationChannelName: String,
-    val notificationChannelDescription: String
+    val notificationChannelDescription: String,
+    val notificationsOffWarning: String,
+    val openSettingsLabel: String
 )
 
 fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) {
@@ -264,7 +273,9 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         totalTimeLabel = { minutes -> "Toplam süre: $minutes dakika" },
         eggLabel = "Yumurta",
         notificationChannelName = "Yumurta alarmı",
-        notificationChannelDescription = "Zamanlayıcı bittiğinde çalar"
+        notificationChannelDescription = "Zamanlayıcı bittiğinde çalar",
+        notificationsOffWarning = "Bildirimler kapalı: uygulama kapalıyken süre dolunca alarm duyulmaz.",
+        openSettingsLabel = "Ayarları aç"
     )
 
     AppLanguage.ENGLISH -> LocalizedStrings(
@@ -293,13 +304,41 @@ fun localizedStrings(language: AppLanguage): LocalizedStrings = when (language) 
         totalTimeLabel = { minutes -> "Total time: $minutes min" },
         eggLabel = "Egg",
         notificationChannelName = "Egg alarm",
-        notificationChannelDescription = "Rings when the timer finishes"
+        notificationChannelDescription = "Rings when the timer finishes",
+        notificationsOffWarning = "Notifications are off: the alarm won't sound while the app is closed.",
+        openSettingsLabel = "Open settings"
     )
 }
 
 private fun SharedPreferences.loadLanguage(): AppLanguage {
-    val saved = getString(PREF_SELECTED_LANGUAGE, AppLanguage.TURKISH.name)
-    return AppLanguage.entries.firstOrNull { it.name == saved } ?: AppLanguage.TURKISH
+    val saved = getString(PREF_SELECTED_LANGUAGE, null)
+    return AppLanguage.entries.firstOrNull { it.name == saved } ?: systemDefaultLanguage()
+}
+
+/**
+ * Kullanıcı henüz dil seçmediyse telefonun diline uyarız: Play'den İngilizce
+ * bir telefona kurulan uygulama Türkçe açılmasın.
+ */
+private fun systemDefaultLanguage(): AppLanguage =
+    if (Locale.getDefault().language == "tr") AppLanguage.TURKISH else AppLanguage.ENGLISH
+
+/** API 31+ VibratorManager üzerinden, öncesinde eski servis adıyla titreşim motoru. */
+private fun Context.defaultVibrator(): Vibrator? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+private fun Context.notificationsEnabled(): Boolean =
+    NotificationManagerCompat.from(this).areNotificationsEnabled()
+
+private fun Context.openNotificationSettings() {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    startActivity(intent)
 }
 
 /** Compose dışından (alarm alıcısı, bildirim kanalı) seçili dile erişmek için. */
@@ -333,12 +372,21 @@ fun EggTimerApp() {
     val savedSession = remember { store.load() }
     val initialChoice = remember { savedSession?.choice ?: store.lastChoice() }
 
-    var selectedLevel by remember { mutableStateOf(initialChoice.level) }
-    var selectedMethod by remember { mutableStateOf(initialChoice.method) }
-    var selectedSize by remember { mutableStateOf(initialChoice.size) }
-    var selectedStartTemp by remember { mutableStateOf(initialChoice.startTemp) }
-    var currentStep by remember {
+    // rememberSaveable: ekran döndürülünce ya da sistem teması değişince
+    // activity yeniden kurulur; seçimler ve bulunulan adım kaybolmasın.
+    var selectedLevel by rememberSaveable { mutableStateOf(initialChoice.level) }
+    var selectedMethod by rememberSaveable { mutableStateOf(initialChoice.method) }
+    var selectedSize by rememberSaveable { mutableStateOf(initialChoice.size) }
+    var selectedStartTemp by rememberSaveable { mutableStateOf(initialChoice.startTemp) }
+    var currentStep by rememberSaveable {
         mutableStateOf(if (savedSession != null) STEP_TIMER else STEP_LEVEL)
+    }
+
+    // Seçim adımlarında sistem geri hareketi bir önceki adıma döner. İlk
+    // adımda ve zamanlayıcıda varsayılan davranış (uygulamadan çıkış) kalır:
+    // çalışan zamanlayıcı arka planda sürer, yanlışlıkla durdurulmaz.
+    BackHandler(enabled = currentStep == STEP_METHOD || currentStep == STEP_DETAILS) {
+        currentStep -= 1
     }
     var language by remember { mutableStateOf(preferences.loadLanguage()) }
 
@@ -841,9 +889,14 @@ fun TimerScreen(
     // Normalde pişirme süresidir, hata ayıklamadaki kısa test turunda onunki.
     var runTotalSeconds by remember(choice) { mutableStateOf(baseTotalSeconds) }
 
+    // Bildirimler kapalıysa arka plan alarmı sessizce başarısız olur; kullanıcı
+    // bunu bilmeli. İzin sonradan ayarlardan da değişebileceği için her
+    // ön plana dönüşte yeniden okunur.
+    var notificationsOn by remember { mutableStateOf(context.notificationsEnabled()) }
+
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* Reddedilirse arka plan bildirimi çıkmaz; zamanlayıcı yine çalışır. */ }
+    ) { notificationsOn = context.notificationsEnabled() }
 
     val ensureNotificationPermission = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -876,6 +929,7 @@ fun TimerScreen(
 
                 Lifecycle.Event.ON_START -> {
                     EggAlarm.cancel(context)
+                    notificationsOn = context.notificationsEnabled()
                     if (isRunning) {
                         val remaining = secondsUntil(endAt)
                         timeLeft = remaining
@@ -925,7 +979,7 @@ fun TimerScreen(
         }
 
         try {
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            val vibrator = context.defaultVibrator()
             activeVibrator = vibrator
             vibrator?.let { v ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1083,7 +1137,7 @@ fun TimerScreen(
                         )
                     } else {
                         Text(
-                            text = "${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}",
+                            text = "${timeLeft / 60}:${String.format(Locale.ROOT, "%02d", timeLeft % 60)}",
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Bold,
                             color = colors.bodyStrong
@@ -1098,6 +1152,13 @@ fun TimerScreen(
                     }
                 }
             }
+        }
+
+        if (isRunning && !notificationsOn) {
+            NotificationsOffBanner(
+                strings = strings,
+                onOpenSettings = { context.openNotificationSettings() }
+            )
         }
 
         if (isDone) {
@@ -1211,6 +1272,38 @@ fun TimerScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NotificationsOffBanner(
+    strings: LocalizedStrings,
+    onOpenSettings: () -> Unit
+) {
+    val colors = LocalEggColors.current
+    Card(
+        onClick = onOpenSettings,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+                text = strings.notificationsOffWarning,
+                fontSize = 13.sp,
+                color = colors.danger,
+                lineHeight = 17.sp
+            )
+            Text(
+                text = strings.openSettingsLabel,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.accent,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }
