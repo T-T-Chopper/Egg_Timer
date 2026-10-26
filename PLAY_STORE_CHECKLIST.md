@@ -8,7 +8,7 @@
    (dosya yoksa release imzasız derlenir, debug etkilenmez)
 4. ✅ **Privacy Policy sayfası eklendi**: `docs/privacy-policy.html` (TR + EN)
 5. ✅ **Privacy Policy URL güncellendi**: `strings.xml` → GitHub Pages adresi
-6. ✅ **Target SDK**: 35
+6. ✅ **Target SDK**: 36 (Android 16) — Play, 31 Ağustos 2026'dan beri yeni uygulamalarda en az 36 istiyor
 7. ✅ **ProGuard/R8 aktif**: Release build için minify ve shrink resources açık
 8. ✅ **Backup / data extraction rules yapılandırıldı**
 9. ✅ **Keystore git koruması**: `.gitignore` içinde `*.jks` ve `keystore.properties`

@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -17,12 +18,14 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.ferhatcangeyik.eggtimer"
-    compileSdk = 35
+    // Google Play, 31 Ağustos 2026'dan beri yeni uygulamalarda en az API 36
+    // (Android 16) hedefini şart koşuyor.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.ferhatcangeyik.eggtimer"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -57,13 +60,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
     buildFeatures {
         compose = true
         // BuildConfig.DEBUG ile hata ayıklamaya özel test kısayolunu ayırmak için
         buildConfig = true
+    }
+}
+
+// Kotlin 2.2'de android { kotlinOptions } kullanımdan kalktı; yerini bu aldı.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 
